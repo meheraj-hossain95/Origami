@@ -1,8 +1,0 @@
-{
-  "work_duration": 28,
-  "short_break_duration": 5,
-  "long_break_duration": 10,
-  "sessions_until_long_break": 4,
-  "auto_start_breaks": false,
-  "auto_start_work": false
-}
