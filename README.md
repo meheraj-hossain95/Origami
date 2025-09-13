@@ -12,6 +12,12 @@
 
 ## ✨ Features
 
+
+<p align="center">
+  <img src="assets/icons/screenshot.png" alt="Origami App Icon" width="1000"/>
+</p>
+
+
 ### 🏠 **Dashboard**
 - **Time-based greetings** - Personalized welcome messages based on time of day
 - **Motivational quotes** - Daily inspiration to keep you motivated
@@ -148,5 +154,6 @@ Want to help improve Origami? Here’s how you can pitch in:
 This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
 
 *Origami - Fold your chaos into clarity*
+
 
 
