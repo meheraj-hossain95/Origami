@@ -14,7 +14,7 @@
 
 
 <p align="center">
-  <img src="assets/icons/screenshot.png" alt="Origami App Icon" width="900"/>
+  <img src="assets/icons/screenshot.png" alt="Origami App Icon" width="700"/>
 </p>
 
 
@@ -154,6 +154,7 @@ Want to help improve Origami? Here’s how you can pitch in:
 This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
 
 *Origami - Fold your chaos into clarity*
+
 
 
 
