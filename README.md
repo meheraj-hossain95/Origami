@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/icons/icon.png" alt="Origami App Icon" width="600"/>
+  <img src="assets/icons/icon.png" alt="Origami App Icon" width="300"/>
 </p>
 
 <h1 align="center" style="font-size: 40px;">Origami - Personal Productivity & Wellness App</h1>
@@ -148,3 +148,4 @@ Want to help improve Origami? Here’s how you can pitch in:
 This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
 
 *Origami - Fold your chaos into clarity*
+
