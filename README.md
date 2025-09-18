@@ -66,7 +66,7 @@
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/yourusername/origami.git
+   git clone https://github.com/meheraj-hossain95/origami.git
    cd origami
    ```
 
@@ -154,6 +154,7 @@ Want to help improve Origami? Here’s how you can pitch in:
 This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
 
 *Origami - Fold your chaos into clarity*
+
 
 
 
