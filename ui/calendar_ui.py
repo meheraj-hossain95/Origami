@@ -11,11 +11,6 @@ from database.models import CalendarEvent
 from database.db import get_setting
 from ui.common_widgets import CustomCard
 
-
-# ---------------------------------------------------------------------------
-# Style sheets
-# ---------------------------------------------------------------------------
-
 _CALENDAR_DARK = """
     ModernCalendarWidget { background-color: #121212; color: #e0e0e0; }
     QWidget { background-color: #121212; color: #e0e0e0; }
