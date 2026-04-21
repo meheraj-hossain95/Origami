@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/icons/app_icon.png" alt="Origami" width="300"/>
+  <img src="assets/icons/app_icon.png" alt="Origami" width="200"/>
 </p>
 
 <h1 align="center">Origami</h1>
