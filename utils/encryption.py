@@ -1,5 +1,4 @@
 import config
-
 class EncryptionManager:
     def __init__(self):
         self.master_password = "default_master_key_2024"
@@ -38,7 +37,6 @@ def decrypt_journal_entry(encrypted: bytes, salt=None, password=None):
     if password:
         return encryption_manager.decrypt(encrypted, password)
     return encryption_manager.decrypt_master(encrypted)
-
 
 def is_encryption_available() -> bool:
     try:
