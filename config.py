@@ -1,7 +1,6 @@
 import os
 import sys
 
-# Get the application directory (works for both script and executable)
 if getattr(sys, 'frozen', False):
     # Running as executable
     app_dir = os.path.dirname(sys.executable)
