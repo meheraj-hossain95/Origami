@@ -82,15 +82,12 @@ MOTIVATIONAL_QUOTES = [
 ]
 
 def get_random_quote():
-    """Get a random quote from the collection"""
     import random
     quote = random.choice(MOTIVATIONAL_QUOTES)
     return f"{quote['text']} — {quote['author']}"
 
 def get_all_quotes():
-    """Get all quotes"""
     return MOTIVATIONAL_QUOTES
 
 def get_formatted_quotes():
-    """Get all quotes formatted as strings"""
     return [f"{q['text']} — {q['author']}" for q in MOTIVATIONAL_QUOTES]
