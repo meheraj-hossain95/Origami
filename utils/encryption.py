@@ -1,6 +1,5 @@
 import config
 
-
 class EncryptionManager:
     def __init__(self):
         self.master_password = "default_master_key_2024"

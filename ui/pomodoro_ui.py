@@ -1,6 +1,3 @@
-"""
-Simple Pomodoro Timer UI - Three main sections as requested
-"""
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, 
     QPushButton, QLabel, QSpinBox
@@ -11,8 +8,7 @@ from PySide6.QtGui import QFont
 from database.db import get_setting
 
 class PomodoroWidget(QWidget):
-    """Simple Pomodoro Timer Widget with three main sections"""
-    
+
     def __init__(self, parent=None):
         super().__init__(parent)
         
@@ -32,7 +28,7 @@ class PomodoroWidget(QWidget):
         self.apply_theme()
     
     def setup_ui(self):
-        """Setup the simple timer UI with three sections"""
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(15)
@@ -47,8 +43,7 @@ class PomodoroWidget(QWidget):
         self.setup_session_section(layout)
     
     def setup_timer_section(self, layout):
-        """Section 1: Digital Counter with Hours, Minutes, Seconds and Control Buttons"""
-        
+
         # Digital counter display
         self.timer_display = QLabel("00:00:00")
         self.timer_display.setFont(QFont("Courier New", 120, QFont.Bold))  # Increased from 80 to 120
@@ -83,8 +78,7 @@ class PomodoroWidget(QWidget):
         layout.addLayout(button_layout)
     
     def setup_duration_section(self, layout):
-        """Section 2: Timer Duration Customization"""
-        
+
         # Duration input fields container
         self.duration_container = QWidget()
         self.duration_container.setMaximumHeight(190)  # Increased to accommodate more padding
@@ -150,8 +144,7 @@ class PomodoroWidget(QWidget):
         layout.addWidget(self.duration_container)
     
     def setup_session_section(self, layout):
-        """Section 3: Session Counter"""
-        
+
         self.session_display = QLabel("Sessions Completed: 0")
         self.session_display.setFont(QFont("Arial", 18, QFont.Bold))
         self.session_display.setAlignment(Qt.AlignCenter)
@@ -160,7 +153,6 @@ class PomodoroWidget(QWidget):
         layout.addWidget(self.session_display)
     
     def apply_duration(self):
-        """Apply the duration settings to the timer"""
         try:
             # Get values from input fields and validate them
             hours_text = self.hours_input.text().strip()
@@ -239,7 +231,6 @@ class PomodoroWidget(QWidget):
             self.seconds_label.setStyleSheet(label_style)
     
     def apply_light_theme(self):
-        """Apply comprehensive light theme styles"""
         # Define light theme colors
         colors = {
             'bg_primary': '#f8f9fa',
@@ -422,7 +413,6 @@ class PomodoroWidget(QWidget):
         """)
     
     def apply_dark_theme(self):
-        """Apply comprehensive dark theme styles"""
         # Define dark theme colors
         colors = {
             'bg_primary': '#1a1a1a',
@@ -605,11 +595,9 @@ class PomodoroWidget(QWidget):
         """)
     
     def refresh_theme(self):
-        """Refresh theme when changed - called by main window"""
         self.apply_theme()
     
     def start_timer(self):
-        """Start the timer"""
         if not self.is_running:
             # Set total time in seconds from applied duration
             if not self.is_paused:
@@ -629,7 +617,6 @@ class PomodoroWidget(QWidget):
             self.ui_timer.start(1000)  # Update every second
     
     def pause_timer(self):
-        """Pause the timer"""
         if self.is_running:
             self.is_running = False
             self.is_paused = True
@@ -642,7 +629,6 @@ class PomodoroWidget(QWidget):
             self.ui_timer.stop()
     
     def reset_timer(self):
-        """Reset the timer"""
         self.is_running = False
         self.is_paused = False
         
@@ -658,7 +644,6 @@ class PomodoroWidget(QWidget):
         self.update_timer_display()
     
     def update_timer(self):
-        """Update the timer every second"""
         if self.is_running and self.time_remaining > 0:
             self.time_remaining -= 1
             self.update_timer_display()
@@ -668,7 +653,6 @@ class PomodoroWidget(QWidget):
                 self.timer_finished()
     
     def timer_finished(self):
-        """Handle when timer reaches zero"""
         self.is_running = False
         self.is_paused = False
         
@@ -689,7 +673,6 @@ class PomodoroWidget(QWidget):
         self.update_timer_display()
     
     def update_timer_display(self):
-        """Update the timer display with current time"""
         hours = self.time_remaining // 3600
         minutes = (self.time_remaining % 3600) // 60
         seconds = self.time_remaining % 60

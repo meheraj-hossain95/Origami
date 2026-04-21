@@ -1,21 +1,15 @@
-"""
-Database connection and initialization
-"""
 import sqlite3
 import os
 from datetime import datetime
 import config
 
 def get_connection():
-    """Get database connection"""
     return sqlite3.connect(config.DB_PATH)
 
 def initialize_database():
-    """Initialize database tables"""
     conn = get_connection()
     cursor = conn.cursor()
     
-    # Create todos table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS todos (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -29,7 +23,6 @@ def initialize_database():
         )
     ''')
     
-    # Create journal_entries table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS journal_entries (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -42,8 +35,7 @@ def initialize_database():
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     ''')
-    
-    # Create pomodoro_sessions table
+
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS pomodoro_sessions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -54,8 +46,7 @@ def initialize_database():
             ended_at TEXT
         )
     ''')
-    
-    # Create calendar_events table
+
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS calendar_events (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -67,8 +58,7 @@ def initialize_database():
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     ''')
-    
-    # Create app_settings table
+
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS app_settings (
             key TEXT PRIMARY KEY,
@@ -79,12 +69,11 @@ def initialize_database():
     
     conn.commit()
     conn.close()
-    
-    # Initialize default settings
+
     set_default_settings()
 
 def set_default_settings():
-    """Set default application settings"""
+
     settings = {
         'theme': config.DEFAULT_THEME,
         'pomodoro_duration': str(config.DEFAULT_POMODORO_DURATION),
@@ -114,7 +103,7 @@ def set_default_settings():
     conn.close()
 
 def get_setting(key, default=None):
-    """Get application setting"""
+
     conn = get_connection()
     cursor = conn.cursor()
     
@@ -126,7 +115,7 @@ def get_setting(key, default=None):
     return result[0] if result else default
 
 def set_setting(key, value):
-    """Set application setting"""
+
     conn = get_connection()
     cursor = conn.cursor()
     

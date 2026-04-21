@@ -11,8 +11,6 @@ from database.db import get_setting
 
 
 class CustomCard(QFrame):
-    """Modern card widget with shadow and rounded corners."""
-
     def __init__(self, title="", parent=None):
         super().__init__(parent)
         self.title = title
@@ -45,7 +43,7 @@ class CustomCard(QFrame):
         layout.addLayout(self.content_layout)
 
     def apply_card_style(self):
-        """Apply card styling based on current theme."""
+
         theme = get_setting('theme', 'light')
 
         if theme == 'dark':
@@ -126,7 +124,6 @@ class ModernButton(QPushButton):
         self.apply_style()
 
     def apply_style(self):
-        """Apply button styling based on type and current theme."""
         theme = get_setting('theme', 'light')
 
         if self.button_type == "primary":
@@ -191,7 +188,6 @@ class ModernButton(QPushButton):
 
 
 class TodoItem(QFrame):
-    """Todo item widget with checkbox, inline editing, and delete action."""
 
     completed_changed = Signal(int, bool)
     text_changed = Signal(int, str)
@@ -297,7 +293,6 @@ class TodoItem(QFrame):
 
 
 class TimerDisplay(QWidget):
-    """Large digital timer display for Pomodoro sessions."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -358,7 +353,6 @@ class TimerDisplay(QWidget):
 
 
 class CircularProgress(QWidget):
-    """Circular progress indicator widget."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -392,7 +386,6 @@ class CircularProgress(QWidget):
 
 
 class JournalEntryWidget(QFrame):
-    """Widget for displaying journal entries in the two-page design."""
 
     edit_requested = Signal(object)
     delete_requested = Signal(object)
@@ -485,7 +478,6 @@ class JournalEntryWidget(QFrame):
 
 
 class MarqueeLabel(QLabel):
-    """Label widget with marquee scrolling for text that overflows its container."""
 
     def __init__(self, text="", parent=None):
         super().__init__(text, parent)

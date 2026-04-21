@@ -1,5 +1,3 @@
-"""Clean Modern Profile UI with Simplified Password Management"""
-
 import re, time, hashlib, os
 from PySide6.QtWidgets import *
 from PySide6.QtCore import Qt, Signal, QTimer
@@ -255,7 +253,7 @@ class CircularAvatar(QLabel):
         self.load_user_image()
 
     def load_user_image(self):
-        """Load the user.png image as the profile avatar with transparent background"""
+
         try:
             # Get the absolute path to the user.png file
             current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -270,13 +268,9 @@ class CircularAvatar(QLabel):
                         self.avatar_size, self.avatar_size, 
                         Qt.KeepAspectRatio, Qt.SmoothTransformation
                     )
-                    
-                    # Create a new pixmap with transparent background
+
                     transparent_pixmap = QPixmap(self.avatar_size, self.avatar_size)
                     transparent_pixmap.fill(Qt.transparent)
-                    
-                    # Create a mask from the scaled pixmap to remove white background
-                    # Convert white pixels to transparent
                     image = scaled_pixmap.toImage()
                     for x in range(image.width()):
                         for y in range(image.height()):
@@ -347,7 +341,6 @@ class SuccessToast(QFrame):
         self.update_theme()
         
     def update_theme(self):
-        """Update toast appearance based on current theme"""
         theme = get_setting('theme', 'light')
         if theme == 'dark':
             self.setStyleSheet("QFrame {background-color: #2d4a2b; border: 1px solid #42c767; border-radius: 8px;}")
@@ -513,35 +506,27 @@ class ProfileWidget(QWidget):
         theme_section.addStretch()
         
         form.addLayout(theme_section)
-        
-        # You can add more personalization options here in the future
-        # For example: Font size, Language, Notifications preferences, etc.
-        
+
         layout.addLayout(form)
 
     def create_security_form(self, layout):
-        # Main container for password management
         self.password_container = QWidget()
         password_layout = QVBoxLayout(self.password_container)
         password_layout.setSpacing(20)
-        
-        # Status indicator
+
         self.create_password_status(password_layout)
-        
-        # Messages section
+
         self.message_label = QLabel()
         self.message_label.setObjectName("messageLabel")
         self.message_label.setWordWrap(True)
         self.message_label.hide()
         password_layout.addWidget(self.message_label)
-        
-        # Dynamic form container
+
         self.form_container = QWidget()
         self.form_layout = QVBoxLayout(self.form_container)
         self.form_layout.setContentsMargins(0, 0, 0, 0)
         password_layout.addWidget(self.form_container)
-        
-        # Build the appropriate form
+
         self.build_password_form()
         
         layout.addWidget(self.password_container)
@@ -593,7 +578,7 @@ class ProfileWidget(QWidget):
             self.status_icon.setProperty("state", "disabled")
     
     def build_password_form(self):
-        # Clear existing form
+
         while self.form_layout.count():
             child = self.form_layout.takeAt(0)
             if child.widget():
@@ -603,37 +588,31 @@ class ProfileWidget(QWidget):
             self.create_protection_enabled_form()
         else:
             self.create_protection_disabled_form()
-        
-        # Reapply theme to newly created widgets
+
         self.apply_theme()
     
     def create_protection_disabled_form(self):
-        """Mode 1: Protection disabled - Show set password form"""
         form_frame = QFrame()
         form_frame.setObjectName("passwordFormFrame")
         form_layout = QVBoxLayout(form_frame)
         form_layout.setContentsMargins(24, 24, 24, 24)
         form_layout.setSpacing(16)
-        
-        # New password field
+
         form_layout.addWidget(QLabel("New Password"))
         self.new_password_input = ModernInput("Enter your password")
         self.new_password_input.setEchoMode(QLineEdit.Password)
         self.new_password_input.textChanged.connect(self.on_new_password_changed)
         form_layout.addWidget(self.new_password_input)
         
-        # Password strength widget
         self.password_strength_widget = PasswordStrengthWidget()
         form_layout.addWidget(self.password_strength_widget)
-        
-        # Confirm password field
+
         form_layout.addWidget(QLabel("Confirm Password"))
         self.confirm_password_input = ModernInput("Confirm your password")
         self.confirm_password_input.setEchoMode(QLineEdit.Password)
         self.confirm_password_input.textChanged.connect(self.validate_set_password_form)
         form_layout.addWidget(self.confirm_password_input)
-        
-        # Set password button
+
         button_layout = QHBoxLayout()
         button_layout.addStretch()
         self.set_password_button = ModernButton("Set Password Protection", "primary")
@@ -646,32 +625,27 @@ class ProfileWidget(QWidget):
         self.form_layout.addWidget(form_frame)
     
     def create_protection_enabled_form(self):
-        """Mode 2: Protection enabled - Show change password and remove password"""
-        # Change password section
+
         change_frame = QFrame()
         change_frame.setObjectName("passwordFormFrame")
         change_layout = QVBoxLayout(change_frame)
         change_layout.setContentsMargins(24, 20, 24, 20)
         change_layout.setSpacing(16)
-        
-        # Current password for change
+
         change_layout.addWidget(QLabel("Current Password"))
         self.current_password_change_input = ModernInput("Enter current password")
         self.current_password_change_input.setEchoMode(QLineEdit.Password)
         change_layout.addWidget(self.current_password_change_input)
-        
-        # New password for change
+
         change_layout.addWidget(QLabel("New Password"))
         self.new_password_change_input = ModernInput("Enter new password")
         self.new_password_change_input.setEchoMode(QLineEdit.Password)
         self.new_password_change_input.textChanged.connect(self.on_change_password_changed)
         change_layout.addWidget(self.new_password_change_input)
-        
-        # Password strength widget for change
+
         self.change_password_strength_widget = PasswordStrengthWidget()
         change_layout.addWidget(self.change_password_strength_widget)
-        
-        # Change password button
+
         change_button_layout = QHBoxLayout()
         change_button_layout.addStretch()
         self.change_password_button = ModernButton("Change Password", "primary")
@@ -681,21 +655,18 @@ class ProfileWidget(QWidget):
         change_layout.addLayout(change_button_layout)
         
         self.form_layout.addWidget(change_frame)
-        
-        # Remove password section
+
         remove_frame = QFrame()
         remove_frame.setObjectName("passwordFormFrame")
         remove_layout = QVBoxLayout(remove_frame)
         remove_layout.setContentsMargins(24, 20, 24, 20)
         remove_layout.setSpacing(16)
-        
-        # Current password for removal
+
         remove_layout.addWidget(QLabel("Current Password"))
         self.current_password_remove_input = ModernInput("Enter current password to remove protection")
         self.current_password_remove_input.setEchoMode(QLineEdit.Password)
         remove_layout.addWidget(self.current_password_remove_input)
-        
-        # Remove password button
+
         remove_button_layout = QHBoxLayout()
         remove_button_layout.addStretch()
         self.remove_password_button = ModernButton("Remove Password Protection", "danger")
@@ -727,7 +698,7 @@ class ProfileWidget(QWidget):
                 self.set_password_button.setEnabled(is_valid)
     
     def show_message(self, message: str, message_type: str = "error"):
-        """Show inline message"""
+
         self.message_label.setText(message)
         
         if message_type == "success":
@@ -736,8 +707,7 @@ class ProfileWidget(QWidget):
             self.message_label.setStyleSheet("color: #ff4757; font-weight: 500; background-color: rgba(255, 71, 87, 0.1); padding: 12px; border-radius: 6px; border-left: 4px solid #ff4757;")
         
         self.message_label.show()
-        
-        # Auto-hide success messages
+
         if message_type == "success":
             QTimer.singleShot(3000, self.hide_message)
     
@@ -745,7 +715,7 @@ class ProfileWidget(QWidget):
         self.message_label.hide()
     
     def clear_all_password_fields(self):
-        """Clear all password input fields"""
+
         for field_name in ['new_password_input', 'confirm_password_input', 
                           'current_password_change_input', 'new_password_change_input', 
                           'current_password_remove_input']:
@@ -754,13 +724,12 @@ class ProfileWidget(QWidget):
                 if field:
                     field.clear()
     def set_password(self):
-        """Set a new password for journal protection"""
+
         self.hide_message()
         
         password = self.new_password_input.text()
         confirm = self.confirm_password_input.text()
-        
-        # Validation
+
         if not password:
             return self.show_message("Password cannot be empty", "error")
         
@@ -769,25 +738,22 @@ class ProfileWidget(QWidget):
         
         if password != confirm:
             return self.show_message("Passwords do not match", "error")
-        
-        # Set the password
+
         if self.password_manager.set_password(password):
-            # Show success message FIRST
+
             self.show_message("✓ Password protection enabled successfully!", "success")
-            
-            # Now switch to protection enabled mode (shows change/remove options)
+
             self.switch_to_protection_enabled()
         else:
             self.show_message("Failed to set password. Please try again.", "error")
 
     def change_password(self):
-        """Change the existing password"""
+
         self.hide_message()
         
         current = self.current_password_change_input.text()
         new_password = self.new_password_change_input.text()
-        
-        # Validation
+
         if not current or not new_password:
             return self.show_message("Please fill in all password fields", "error")
         
@@ -796,8 +762,7 @@ class ProfileWidget(QWidget):
         
         if current == new_password:
             return self.show_message("New password must be different from current password", "error")
-        
-        # Change password
+
         if self.password_manager.change_password(current, new_password):
             self.show_message("Password updated successfully!", "success")
             self.clear_all_password_fields()
@@ -805,43 +770,32 @@ class ProfileWidget(QWidget):
             self.show_message("Current password is incorrect", "error")
 
     def remove_password(self):
-        """Remove password protection"""
         self.hide_message()
         
         current = self.current_password_remove_input.text()
         
         if not current:
             return self.show_message("Please enter your current password", "error")
-        
-        # Remove password
+
         if self.password_manager.remove_password(current):
-            # Emit signal that password was removed
             self.password_removed.emit()
-            
-            # Immediately switch to protection disabled mode
             self.switch_to_protection_disabled()
-            
-            # Show success message after switching
             self.show_message("Password protection removed successfully!", "success")
         else:
             self.show_message("Current password is incorrect", "error")
 
     def switch_to_protection_enabled(self):
-        """Switch to protection enabled mode"""
+
         self.hide_message()
         self.update_password_status()
         self.build_password_form()
-        # Ensure theme is applied after switching
         self.apply_theme()
 
     def switch_to_protection_disabled(self):
-        """Switch to protection disabled mode"""
+
         self.hide_message()
-        # Force update the password status first
         self.update_password_status()
-        # Clear and rebuild the form for disabled mode
         self.build_password_form()
-        # Ensure theme is applied after switching
         self.apply_theme()
 
     def create_action_buttons(self, layout):
@@ -866,7 +820,7 @@ class ProfileWidget(QWidget):
         if self.success_toast: 
             self.success_toast.deleteLater()
         self.success_toast = SuccessToast(message, self)
-        # Ensure the toast uses the current theme
+
         self.success_toast.update_theme()
         self.success_toast.setGeometry(20, 20, self.width() - 40, 50)
         self.success_toast.show()
@@ -884,11 +838,9 @@ class ProfileWidget(QWidget):
         self.display_name.setText(username or "Welcome!")
         self.display_handle.setText(f"Good evening, {handle}" if handle else "Good evening, user")
         self.display_email.setText(email or "no-email@example.com")
-        
-        # Update theme button
+
         self.update_theme_button()
-        
-        # Update password status and build appropriate form
+
         self.update_password_status()
         self.build_password_form()
 
@@ -922,18 +874,15 @@ class ProfileWidget(QWidget):
         self.show_success_toast("Profile updated successfully!")
     
     def toggle_theme(self):
-        """Toggle between dark and light theme"""
+
         current_theme = get_setting('theme', 'light')
         new_theme = 'light' if current_theme == 'dark' else 'dark'
         set_setting('theme', new_theme)
-        
-        # Update the button appearance
+
         self.update_theme_button()
-        
-        # Apply the new theme to this widget
+
         self.apply_theme()
-        
-        # Emit signal to notify main window
+
         self.theme_changed.emit(new_theme)
     
     def update_theme_button(self):
@@ -944,14 +893,13 @@ class ProfileWidget(QWidget):
         else:
             self.theme_toggle_button.setText("Dark Mode")
         
-        # Update button style for current theme
         self.theme_toggle_button.update_style()
 
     def show_success_toast(self, message):
         if self.success_toast: 
             self.success_toast.deleteLater()
         self.success_toast = SuccessToast(message, self)
-        # Ensure the toast uses the current theme
+
         self.success_toast.update_theme()
         self.success_toast.setGeometry(20, 20, self.width() - 40, 50)
         self.success_toast.show()
@@ -1024,24 +972,19 @@ class ProfileWidget(QWidget):
                 QLabel#strengthLabel {color: #616161; font-size: 12px; font-weight: 500; margin-top: 4px;}
             """)
 
-        # Update all modern components
         for widget in self.findChildren(ModernInput): 
             widget.update_validation_style()
         for widget in self.findChildren(ModernButton): 
             widget.update_style()
             
     def update_theme(self):
-        """Public method to be called when the main application theme changes"""
         self.apply_theme()
-        # Force update any existing success toast
         if self.success_toast:
             self.success_toast.deleteLater()
             self.success_toast = None
 
     def refresh_theme(self):
-        """Public method to be called when the main application theme changes - used by main window"""
         self.apply_theme()
-        # Force update any existing success toast
         if self.success_toast:
             self.success_toast.deleteLater()
             self.success_toast = None

@@ -22,8 +22,7 @@ from quotes import get_random_quote
 
 # --- Theme Definitions ---
 class AppTheme:
-    """Manages color palettes for different themes."""
-    
+
     # Define color palettes for light and dark modes
     LIGHT_PALETTE = {
         'background': '#f0f2f5',  # Light gray, similar to Google/Facebook bg
@@ -250,8 +249,7 @@ class AppTheme:
 
 # --- Modified WelcomeWidget ---
 class WelcomeWidget(QWidget):
-    """Welcome widget with time-based greeting and motivational quotes"""
-    
+
     def __init__(self):
         super().__init__()
         self.setObjectName("welcomeWidget") # Set object name for styling
@@ -264,7 +262,6 @@ class WelcomeWidget(QWidget):
         self.timer.start(60000)  # Update every minute
     
     def refresh_theme(self):
-        """Refresh theme for welcome widget components"""
         # Update greeting and quote label styles based on current theme
         theme = get_setting('theme', 'light')
         
@@ -386,7 +383,6 @@ class WelcomeWidget(QWidget):
 
 # --- Modified MainWindow ---
 class MainWindow(QMainWindow):
-    """Main application window"""
     
     def __init__(self):
         super().__init__()
@@ -408,7 +404,6 @@ class MainWindow(QMainWindow):
         self.apply_theme()
     
     def set_window_icon(self):
-        """Set the window icon with proper path resolution"""
         # Handle both development and PyInstaller executable paths
         if getattr(sys, 'frozen', False):
             # Running as PyInstaller executable
@@ -424,7 +419,6 @@ class MainWindow(QMainWindow):
     
 
     def setup_ui(self):
-        """Setup the main UI"""
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         
@@ -445,7 +439,6 @@ class MainWindow(QMainWindow):
         self.show_page(0)  # Show welcome page by default
     
     def setup_sidebar(self):
-        """Setup the navigation sidebar with professional design"""
         self.sidebar_frame = QFrame()
         self.sidebar_frame.setObjectName("sidebarFrame") # Object name for styling
         self.sidebar_frame.setFixedWidth(self.sidebar_width)
@@ -529,7 +522,6 @@ class MainWindow(QMainWindow):
 
     
     def setup_content_area(self):
-        """Setup the main content area"""
         self.content_area = QStackedWidget()
         
         # Create widgets
@@ -570,7 +562,6 @@ class MainWindow(QMainWindow):
             self.content_area.addWidget(scroll_area)
     
     def show_page(self, index):
-        """Show the selected page"""
         if 0 <= index < 5:  # Only handle the 5 main navigation pages
             self.content_area.setCurrentIndex(index)
             
@@ -584,7 +575,6 @@ class MainWindow(QMainWindow):
                 self.statusBar().showMessage(f"Current page: {pages[index]}")
     
     def show_profile(self):
-        """Show the profile page"""
         # Profile widget is at index 5 (after the 5 main pages)
         self.content_area.setCurrentIndex(5)
         self.statusBar().showMessage("Current page: Profile")
@@ -593,17 +583,14 @@ class MainWindow(QMainWindow):
         self.nav_list.setCurrentRow(-1)
     
     def update_task_completion_card(self):
-        """Update the task completion card when tasks change"""
         if hasattr(self, 'welcome_widget') and hasattr(self.welcome_widget, 'task_completion_card'):
             self.welcome_widget.task_completion_card.update_stats()
     
     def refresh_upcoming_events(self):
-        """Refresh the upcoming events card immediately when calendar events change"""
         if hasattr(self, 'welcome_widget') and hasattr(self.welcome_widget, 'upcoming_events_card'):
             self.welcome_widget.upcoming_events_card.refresh_events_immediately()
     
     def handle_theme_change(self, theme):
-        """Handle theme change from profile widget"""
         self.apply_theme()
         
         # Also refresh theme for any open modal dialogs
@@ -613,7 +600,6 @@ class MainWindow(QMainWindow):
                 child.refresh_theme()
     
     def update_user_display(self, name):
-        """Update the user display when profile is changed"""
         self.profile_button.setText(f"{name}")
         self.profile_button.setToolTip("")
         
@@ -623,20 +609,17 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"Profile updated for {name}", 3000)
     
     def handle_password_removed(self):
-        """Handle when password is removed from profile"""
         # Reset journal authentication state so it doesn't ask for password anymore
         self.journal_widget.reset_authentication_state()
         self.statusBar().showMessage("Password removed - journal access updated", 3000)
     
     def setup_status_bar(self):
-        """Setup the status bar"""
         status_bar = QStatusBar()
         self.setStatusBar(status_bar)
         # Styles applied via AppTheme.get_stylesheet
         status_bar.showMessage("Ready")
     
     def apply_theme(self):
-        """Apply the current theme dynamically."""
         # Prevent recursive calls during theme application
         if hasattr(self, '_applying_theme') and self._applying_theme:
             return
@@ -729,7 +712,6 @@ class MainWindow(QMainWindow):
 
 
     def load_settings(self):
-        """Load application settings"""
         # Load username for profile button
         username = get_setting('username', get_setting('user_name', 'User'))
         self.profile_button.setText(f"{username}")
@@ -738,16 +720,13 @@ class MainWindow(QMainWindow):
         self.setup_shortcuts()
     
     def setup_shortcuts(self):
-        """Setup keyboard shortcuts"""
         pass
     
     
     def closeEvent(self, event):
-        """Handle application close event"""
         # Accept the close event without confirmation
         event.accept()
     
     def resizeEvent(self, event):
-        """Handle window resize event"""
         super().resizeEvent(event)
         # Removed responsive sidebar collapsing

@@ -1,15 +1,10 @@
-"""
-Database models and ORM-like helper functions
-"""
 from datetime import datetime
 from database.db import get_connection
 
 class Todo:
-    """Todo model"""
-    
+   
     @staticmethod
     def create(title, description="", priority=1, due_date=None):
-        """Create a new todo"""
         conn = get_connection()
         cursor = conn.cursor()
         
@@ -26,7 +21,6 @@ class Todo:
     
     @staticmethod
     def get_all():
-        """Get all todos"""
         conn = get_connection()
         cursor = conn.cursor()
         
@@ -38,7 +32,6 @@ class Todo:
     
     @staticmethod
     def update_completed(todo_id, completed):
-        """Update todo completion status"""
         conn = get_connection()
         cursor = conn.cursor()
         
@@ -52,7 +45,6 @@ class Todo:
     
     @staticmethod
     def update_title(todo_id, title):
-        """Update todo title"""
         conn = get_connection()
         cursor = conn.cursor()
         
@@ -66,7 +58,6 @@ class Todo:
     
     @staticmethod
     def delete(todo_id):
-        """Delete a todo"""
         conn = get_connection()
         cursor = conn.cursor()
         
@@ -76,8 +67,7 @@ class Todo:
         conn.close()
 
 class JournalEntry:
-    """Journal entry model with enhanced date and encryption support"""
-    
+
     def __init__(self, id=None, title="", content="", encrypted_content=None, is_encrypted=False, 
                  mood_rating=3, created_at=None, updated_at=None):
         self.id = id
@@ -91,7 +81,7 @@ class JournalEntry:
     
     @staticmethod
     def create(title, content, mood_rating=None, is_encrypted=False):
-        """Create a new journal entry"""
+
         conn = get_connection()
         cursor = conn.cursor()
         
@@ -108,7 +98,7 @@ class JournalEntry:
     
     @staticmethod
     def create_with_date(title, content, entry_date, mood_rating=None, is_encrypted=False):
-        """Create a new journal entry with specific date"""
+
         conn = get_connection()
         cursor = conn.cursor()
         
@@ -131,7 +121,7 @@ class JournalEntry:
     
     @staticmethod
     def get_all():
-        """Get all journal entries as JournalEntry objects"""
+
         conn = get_connection()
         cursor = conn.cursor()
         
@@ -158,11 +148,10 @@ class JournalEntry:
     
     @staticmethod
     def get_by_date(entry_date):
-        """Get journal entry for a specific date"""
+
         conn = get_connection()
         cursor = conn.cursor()
         
-        # Convert date to start and end of day
         if isinstance(entry_date, datetime):
             start_date = entry_date.replace(hour=0, minute=0, second=0, microsecond=0)
             end_date = entry_date.replace(hour=23, minute=59, second=59, microsecond=999999)
@@ -196,7 +185,7 @@ class JournalEntry:
     
     @staticmethod
     def search_entries(query):
-        """Search journal entries by content or date"""
+
         conn = get_connection()
         cursor = conn.cursor()
         
@@ -227,7 +216,7 @@ class JournalEntry:
         return entries
     
     def update(self, title=None, content=None, mood_rating=None):
-        """Update this journal entry"""
+
         if not self.id:
             return
         
@@ -268,7 +257,7 @@ class JournalEntry:
         conn.close()
     
     def delete(self):
-        """Delete this journal entry"""
+
         if self.id:
             conn = get_connection()
             cursor = conn.cursor()
@@ -279,11 +268,11 @@ class JournalEntry:
             conn.close()
     
     def get_formatted_date(self):
-        """Get formatted date string"""
+
         return self.created_at.strftime("%B %d, %Y")
     
     def get_content_preview(self, max_length=150):
-        """Get content preview with specified length"""
+
         content = self.content
         if self.is_encrypted and self.encrypted_content:
             content = "[Encrypted Entry]"
@@ -291,11 +280,10 @@ class JournalEntry:
         return content[:max_length] + "..." if len(content) > max_length else content
 
 class PomodoroSession:
-    """Pomodoro session model"""
     
     @staticmethod
     def create(duration, task_description=""):
-        """Create a new pomodoro session"""
+
         conn = get_connection()
         cursor = conn.cursor()
         
@@ -312,7 +300,7 @@ class PomodoroSession:
     
     @staticmethod
     def complete_session(session_id):
-        """Mark session as completed"""
+
         conn = get_connection()
         cursor = conn.cursor()
         
@@ -327,7 +315,7 @@ class PomodoroSession:
     
     @staticmethod
     def get_recent_sessions(limit=10):
-        """Get recent pomodoro sessions"""
+
         conn = get_connection()
         cursor = conn.cursor()
         
@@ -343,7 +331,6 @@ class PomodoroSession:
         return sessions
 
 class CalendarEvent:
-    """Calendar event model"""
     
     def __init__(self, id=None, title="", description="", event_date=None, 
                  priority="normal", created_at=None, updated_at=None):
@@ -357,7 +344,6 @@ class CalendarEvent:
     
     @staticmethod
     def create(title, description="", event_date=None, priority="normal"):
-        """Create a new calendar event"""
         conn = get_connection()
         cursor = conn.cursor()
         
@@ -383,7 +369,6 @@ class CalendarEvent:
     
     @staticmethod
     def get_all():
-        """Get all calendar events"""
         conn = get_connection()
         cursor = conn.cursor()
         
@@ -409,7 +394,6 @@ class CalendarEvent:
     
     @staticmethod
     def get_by_date(event_date):
-        """Get events for a specific date"""
         conn = get_connection()
         cursor = conn.cursor()
         
@@ -444,7 +428,6 @@ class CalendarEvent:
     
     @staticmethod
     def get_upcoming_events(limit=2):
-        """Get upcoming events from today"""
         conn = get_connection()
         cursor = conn.cursor()
         
@@ -476,7 +459,6 @@ class CalendarEvent:
         return events
     
     def update(self, title=None, description=None, priority=None):
-        """Update this calendar event"""
         if not self.id:
             return
         
@@ -516,7 +498,6 @@ class CalendarEvent:
         conn.close()
     
     def delete(self):
-        """Delete this calendar event"""
         if self.id:
             conn = get_connection()
             cursor = conn.cursor()
@@ -527,7 +508,6 @@ class CalendarEvent:
             conn.close()
     
     def get_formatted_date(self):
-        """Get formatted date string"""
         if isinstance(self.event_date, str):
             event_date = datetime.fromisoformat(self.event_date).date()
         else:
@@ -536,7 +516,6 @@ class CalendarEvent:
         return event_date.strftime("%B %d, %Y")
     
     def get_priority_color(self):
-        """Get color based on priority"""
         priority_colors = {
             'important': '#ff4444',        # Red
             'next_important': '#ffaa00',   # Yellow/Orange
@@ -545,7 +524,6 @@ class CalendarEvent:
         return priority_colors.get(self.priority, '#44aa44')
     
     def get_priority_display(self):
-        """Get display text for priority"""
         priority_display = {
             'important': 'Important',
             'next_important': 'Next Important', 
@@ -554,11 +532,10 @@ class CalendarEvent:
         return priority_display.get(self.priority, 'Normal')
 
 class User:
-    """User profile model"""
-    
+  
     @staticmethod
     def get_profile():
-        """Get user profile data"""
+
         from database.db import get_setting
         
         profile = {
@@ -573,19 +550,16 @@ class User:
     
     @staticmethod
     def update_profile(name, email):
-        """Update user profile"""
         from database.db import set_setting, get_setting
         
         set_setting('user_name', name)
         set_setting('user_email', email)
         set_setting('profile_last_updated', datetime.now().isoformat())
         
-        # Set member_since if not already set
         if not get_setting('member_since', ''):
             set_setting('member_since', datetime.now().strftime('%Y-%m-%d'))
     
     @staticmethod
     def get_name():
-        """Get user name"""
         from database.db import get_setting
         return get_setting('user_name', 'User')
