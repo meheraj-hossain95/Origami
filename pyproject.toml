@@ -1,0 +1,29 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "origami"
+version = "3.0.0"
+description = "A calm desktop workspace for tasks, habits, calendar and focus."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+dependencies = ["PySide6-Essentials>=6.8"]
+
+[project.scripts]
+origami = "origami.app:run"
+
+[tool.hatch.build.targets.wheel]
+packages = ["origami"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+"origami/ui/icons.py" = ["E501"]
+"origami/ui/theme.py" = ["E501"]
