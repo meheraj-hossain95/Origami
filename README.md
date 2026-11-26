@@ -16,6 +16,10 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/meheraj-hossain95/Origami/releases/latest"><img src="https://img.shields.io/badge/Download_for_Windows-v1.0.0-0078D4?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows"></a>
+</p>
+
+<p align="center">
   <img src="docs/dashboard-light.png" alt="Origami dashboard" width="720"/>
 </p>
 
@@ -74,9 +78,15 @@ Everything stays on your computer in a single local database. You don't need an 
 
 ## Download for Windows
 
-Get `Origami-1.0.0-Windows-x64.zip` from the [Releases page](https://github.com/meheraj-hossain95/Origami/releases), extract it and run `Origami-1.0.0-Setup.exe`. No Python needed. Prefer not to install? Run `Origami-Portable\Origami.exe` instead.
+1. Go to the [latest release](https://github.com/meheraj-hossain95/Origami/releases/latest) and download **`Origami-1.0.0-Windows-x64.zip`**.
+2. Extract the ZIP.
+3. Run **`Origami-1.0.0-Setup.exe`** and follow the steps.
 
-Uninstall from **Settings → Apps → Installed apps**. You'll be asked whether to keep your data.
+Prefer not to install? Run `Origami-Portable\Origami.exe` instead.
+
+Requires 64-bit Windows 10 or 11. You don't need Python. If SmartScreen warns you, click **More info → Run anyway**.
+
+**To uninstall:** go to **Settings → Apps → Installed apps → Origami**. You'll be asked whether to keep your data.
 
 ## Running from source
 
