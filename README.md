@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="origami/assets/icon.png" alt="Origami" width="11"/>
+  <img src="origami/assets/icon.png" alt="Origami" width="118"/>
 </p>
 
 <h1 align="center">Origami</h1>
