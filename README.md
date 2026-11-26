@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="origami/assets/icon.png" alt="Origami" width="96"/>
+  <img src="origami/assets/icon.png" alt="Origami" width="11"/>
 </p>
 
 <h1 align="center">Origami</h1>
@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/dashboard-light.png" alt="Origami dashboard" width="820"/>
+  <img src="docs/dashboard-light.png" alt="Origami dashboard" width="720"/>
 </p>
 
 Most productivity apps want to be your whole operating system. Origami just wants to be the window you open in the morning. It shows what's due today, which habits you've kept up, what's coming this week and how much focused work you've actually done. Then it gets out of the way.
@@ -37,7 +37,11 @@ Everything stays on your computer in a single local database. You don't need an 
 
 **Focus.** A Pomodoro timer with focus, short-break and custom modes. Sessions are logged automatically, and a weekly chart shows where your hours went.
 
-**And the small things:** light, dark or system theme, eight accent colors, adjustable text size, a `Ctrl+K` command palette, desktop notifications that keep arriving from the system tray, and one-click JSON export of everything.
+**Notifications.** Themed reminder pop-ups with a sound of your choice, and a switch for each kind: tasks, Pomodoro, calendar events and timetable. They keep arriving from the system tray after you close the window.
+
+**Settings.** Light, dark or system theme, eight accent colors, four text sizes and a 24-hour or 12-hour clock. Your data can be exported to JSON in one click.
+
+**And the small things:** a `Ctrl+K` command palette for jumping anywhere, keyboard shortcuts for every page, and only ever one copy of the app running at a time.
 
 ## A closer look
 
@@ -59,16 +63,22 @@ Everything stays on your computer in a single local database. You don't need an 
     <td align="center"><sub>Timetable</sub></td>
   </tr>
   <tr>
-    <td><img src="docs/dashboard-dark.png" alt="Dashboard in dark mode"/></td>
+    <td><img src="docs/settings-dark.png" alt="Settings"/></td>
     <td><img src="docs/focus-dark.png" alt="Focus timer in dark mode"/></td>
   </tr>
   <tr>
-    <td align="center"><sub>Dark mode</sub></td>
+    <td align="center"><sub>Settings</sub></td>
     <td align="center"><sub>Focus</sub></td>
   </tr>
 </table>
 
-## Getting started
+## Download for Windows
+
+Get `Origami-1.0.0-Windows-x64.zip` from the [Releases page](https://github.com/meheraj-hossain95/Origami/releases), extract it and run `Origami-1.0.0-Setup.exe`. No Python needed. Prefer not to install? Run `Origami-Portable\Origami.exe` instead.
+
+Uninstall from **Settings → Apps → Installed apps**. You'll be asked whether to keep your data.
+
+## Running from source
 
 You'll need Python 3.10 or newer.
 
@@ -80,10 +90,12 @@ python -m venv .venv
 .venv\Scripts\activate        # macOS / Linux: source .venv/bin/activate
 
 pip install -r requirements.txt
-python main.py
+python -m origami
 ```
 
 You can also install it as a package with `pip install .` and launch it with the `origami` command.
+
+Only one copy runs at a time: launching Origami again brings the open window forward.
 
 ## Keyboard shortcuts
 
@@ -109,9 +121,13 @@ origami/
 ├── store.py        SQLite data layer; emits a signal whenever something changes
 ├── timer.py        drift-free Pomodoro timer
 ├── reminders.py    checks for due reminders in the background
+├── sounds.py       reminder sounds, played through the operating system
+├── timefmt.py      24-hour or 12-hour time display
+├── instance.py     keeps a single copy of the app running
 └── ui/
     ├── theme.py    colors, fonts and the single app-wide stylesheet
     ├── shell.py    main window, sidebar, tray
+    ├── notify.py   themed desktop notifications
     ├── palette.py  Ctrl+K command palette
     └── pages/      dashboard, tasks, habits, calendar, timetable, focus, settings
 ```

@@ -11,19 +11,20 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QPlainTextEdit,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
     QWidget,
 )
 
 from origami.context import Context
 from origami.store import PRIORITIES, Event
+from origami.timefmt import clock
 from origami.ui.components import (
     Card,
     Dropdown,
     EmptyState,
     IconLabel,
     Page,
-    PriorityPill,
     Segmented,
     button,
     clear,
@@ -200,7 +201,7 @@ class MonthGrid(QWidget):
             painter.drawRoundedRect(pill, 5, 5)
             text = pill.adjusted(7, 0, -4, 0)
             painter.setPen(tint(event.priority, 2))
-            name = f"{event.time:%H:%M} {event.title}" if event.time else event.title
+            name = f"{clock(event.time, short=True)} {event.title}" if event.time else event.title
             elided = metrics.elidedText(name, Qt.TextElideMode.ElideRight, int(text.width()))
             painter.drawText(text, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, elided)
             y += line
@@ -271,14 +272,14 @@ class EventRow(QWidget):
     def __init__(self, event: Event, on_edit, on_delete) -> None:
         super().__init__()
         title = label(event.title, "h3", wrap=True)
-        facts = [f"{event.time:%H:%M}" if event.time else "All day"]
+        facts = [clock(event.time) if event.time else "All day"]
         if event.repeats:
             facts.append(repeat_text(event.repeat_days))
         meta = [label("  ·  ".join(facts), "caption")]
         if event.remind is not None:
             meta.append(IconLabel("bell", "muted", 12))
             meta[-1].setToolTip(f"Reminder: {remind_text(event.remind)}")
-        texts = [title, hbox(*meta, None, spacing=6), hbox(PriorityPill(event.priority), None)]
+        texts = [title, hbox(*meta, None, spacing=6)]
         if event.notes:
             texts.append(label(event.notes, "muted", wrap=True))
         for text in texts:
@@ -297,9 +298,10 @@ class EventRow(QWidget):
 
         self._priority = event.priority
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(14, 8, 6, 8)
+        layout.setContentsMargins(12, 6, 6, 6)
         layout.setSpacing(6)
-        layout.addLayout(vbox(*texts, spacing=4), 1)
+        layout.addLayout(vbox(*texts, spacing=2), 1)
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         for action in self.actions:
             layout.addWidget(action, 0, Qt.AlignmentFlag.AlignTop)
 
@@ -309,8 +311,6 @@ class EventRow(QWidget):
         painter.setPen(NO_PEN)
         painter.setBrush(tint(self._priority, 0))
         painter.drawRoundedRect(QRectF(self.rect()), 8, 8)
-        painter.setBrush(tint(self._priority, 2))
-        painter.drawRoundedRect(QRectF(0, 0, 4, self.height()), 2, 2)
 
     def enterEvent(self, event) -> None:
         for action in self.actions:
@@ -352,9 +352,21 @@ class CalendarPage(Page):
         self._show(today)
 
     def _build_panel(self) -> Card:
-        self.day_title = label(role="title")
-        self.day_sub = label(role="muted")
-        self.events_box = vbox(spacing=8)
+        self.day_title = label(role="h2")
+        self.day_sub = label(role="caption")
+        self.events_box = vbox(spacing=6)
+        self.events_box.setContentsMargins(0, 0, 0, 0)
+        events_host = QWidget()
+        events_layout = vbox(spacing=0)
+        events_layout.setContentsMargins(0, 0, 0, 0)
+        events_layout.addLayout(self.events_box)
+        events_layout.addStretch(1)
+        events_host.setLayout(events_layout)
+        self.events_area = QScrollArea()
+        self.events_area.setObjectName("DayEvents")
+        self.events_area.setWidgetResizable(True)
+        self.events_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.events_area.setWidget(events_host)
         self.form_title = label("New event", "eyebrow")
         self.title_edit = QLineEdit()
         self.title_edit.setPlaceholderText("Event title")
@@ -362,7 +374,6 @@ class CalendarPage(Page):
         self.title_edit.returnPressed.connect(self._submit)
         self.notes_edit = QPlainTextEdit()
         self.notes_edit.setPlaceholderText("Notes (optional)")
-        self.notes_edit.setMaximumHeight(80)
         self.notes_edit.setMaximumHeight(48)
         self.priority = Segmented([(str(i), name) for i, name in enumerate(PRIORITIES)], "0")
         self.priority.setProperty("compact", True)
@@ -370,8 +381,9 @@ class CalendarPage(Page):
         self.time_box.addItem("All day", None)
         for minutes in range(0, 24 * 60, 15):
             slot = time(minutes // 60, minutes % 60)
-            self.time_box.addItem(f"{slot:%H:%M}", slot)
+            self.time_box.addItem(clock(slot), slot)
         self.time_box.setToolTip("Start time")
+        theme.changed.connect(self._relabel_times)
         self.remind_box = Dropdown()
         for text, minutes in REMIND_OPTIONS:
             self.remind_box.addItem(text, minutes)
@@ -384,12 +396,11 @@ class CalendarPage(Page):
         self.panel = panel
         theme.changed.connect(self._size_panel)
         self._size_panel()
-        panel.body.setContentsMargins(16, 16, 16, 14)
-        panel.body.setSpacing(10)
+        panel.body.setContentsMargins(16, 12, 16, 14)
+        panel.body.setSpacing(8)
         panel.body.addLayout(vbox(self.day_title, self.day_sub, spacing=0))
         panel.body.addWidget(divider())
-        panel.body.addLayout(self.events_box)
-        panel.body.addStretch(1)
+        panel.body.addWidget(self.events_area, 1)
         panel.body.addWidget(divider())
         panel.body.addWidget(self.form_title)
         panel.body.addWidget(self.title_edit)
@@ -404,6 +415,10 @@ class CalendarPage(Page):
         self.cancel_button.hide()
         return panel
 
+    def _relabel_times(self) -> None:
+        for i in range(1, self.time_box.count()):
+            self.time_box.setItemText(i, clock(self.time_box.itemData(i)))
+
     def _size_panel(self) -> None:
         self.panel.setFixedWidth(round(PANEL_WIDTH * max(1.0, theme.scale)))
 
@@ -411,7 +426,7 @@ class CalendarPage(Page):
         self._reload()
 
     def _on_changed(self, domain: str) -> None:
-        if domain == "events":
+        if domain == "events" and self.live():
             self._reload()
 
     def _show(self, day: date) -> None:

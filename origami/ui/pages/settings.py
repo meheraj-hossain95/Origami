@@ -7,13 +7,15 @@ from PySide6.QtCore import QRectF, Qt, QUrl, Signal
 from PySide6.QtGui import QColor, QDesktopServices, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QAbstractButton, QButtonGroup, QFileDialog, QHBoxLayout, QLayout, QWidget
 
-from origami import __version__
+from origami import __version__, sounds, timefmt
 from origami.context import Context
+from origami.notify_prefs import NOTIFY_DEFAULTS
 from origami.ui.components import (
     Card,
     ElidedLabel,
     Page,
     Segmented,
+    Switch,
     button,
     divider,
     hbox,
@@ -23,6 +25,13 @@ from origami.ui.components import (
 from origami.ui.theme import ACCENTS, DEFAULT_ACCENT, DEFAULT_FONT_SIZE, FONT_SIZES, theme
 
 THEMES = (("system", "System"), ("light", "Light"), ("dark", "Dark"))
+NOTIFY_KINDS = (
+    ("notify_tasks", "Task reminders", "When a task's reminder time comes"),
+    ("notify_focus", "Pomodoro", "When a focus session or break ends"),
+    ("notify_events", "Calendar events", "For events you've set a reminder on"),
+    ("notify_timetable", "Timetable", "For timetable blocks you've set a reminder on"),
+)
+CLOCKS = (("24", "24-hour"), ("12", "12-hour"))
 SWATCH = 30
 
 
@@ -108,7 +117,24 @@ class SettingsPage(Page):
         size_picker = Segmented(sizes, store.get("font_size", DEFAULT_FONT_SIZE))
         size_picker.changed.connect(self._set_font_size)
         appearance.body.addLayout(row("Text size", "Make text smaller or larger", size_picker))
+        appearance.body.addWidget(divider())
+        clock_picker = Segmented(CLOCKS, "24" if timefmt.hour24() else "12")
+        clock_picker.changed.connect(self._set_clock)
+        appearance.body.addLayout(row("Time format", "Show times as 18:30 or 6:30 PM", clock_picker))
         self.body.addWidget(appearance)
+
+        alerts = Card("Notifications")
+        alerts.body.setSpacing(16)
+        current = store.get("reminder_sound", sounds.DEFAULT_SOUND)
+        sound_picker = Segmented(list(sounds.SOUNDS.items()), current)
+        sound_picker.changed.connect(self._set_sound)
+        alerts.body.addLayout(row("Reminder sound", "Pick one to hear it", sound_picker))
+        for key, title, hint in NOTIFY_KINDS:
+            alerts.body.addWidget(divider())
+            switch = Switch(bool(store.get_int(key, NOTIFY_DEFAULTS[key])))
+            switch.toggled.connect(lambda on, k=key: self.ctx.store.set(k, int(on)))
+            alerts.body.addLayout(row(title, hint, switch))
+        self.body.addWidget(alerts)
 
         data = Card("Data")
         path = str(store.path.parent)
@@ -133,6 +159,17 @@ class SettingsPage(Page):
     def _set_font_size(self, key: str) -> None:
         self.ctx.store.set("font_size", key)
         theme.set_font_size(key)
+
+    def _set_clock(self, key: str) -> None:
+        self.ctx.store.set("clock", key)
+        timefmt.set_hour24(key != "12")
+        theme.changed.emit()  # repaint drawn widgets (calendar grid, timetable)
+        for domain in ("tasks", "events", "reminders", "timetable"):
+            self.ctx.store.changed.emit(domain)  # pages rebuild their text
+
+    def _set_sound(self, key: str) -> None:
+        self.ctx.store.set("reminder_sound", key)
+        sounds.play(key)
 
     def _open_folder(self) -> None:
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.ctx.store.path.parent)))

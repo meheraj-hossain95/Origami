@@ -5,7 +5,7 @@ from datetime import date, timedelta
 
 from PySide6.QtCore import QPointF, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QMouseEvent, QPainter, QPainterPath, QPen
-from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QFrame, QLabel, QScrollArea, QVBoxLayout, QWidget
 
 from origami.context import Context
 from origami.store import Habit
@@ -72,7 +72,7 @@ class HabitItem(QFrame):
         self.setAttribute(Qt.WidgetAttribute.WA_Hover)
         self.setMinimumHeight(60)
 
-        check = CheckDot(habit.done_today, 22)
+        check = CheckDot(habit.done_today, 22, f"Done today: {habit.name}")
         check.setToolTip("Mark today done" if not habit.done_today else "Undo today")
         check.clicked.connect(lambda: self.toggled.emit(habit.id))
         name = ElidedLabel(habit.name, "h3")
@@ -364,13 +364,20 @@ class HabitsPage(Page):
         self.input.cancelled.connect(self.input.clear)
 
         self.rows = vbox(spacing=4)
+        rows_host = QWidget()
+        rows_host.setLayout(vbox(self.rows, None, spacing=0))
+        rows_area = QScrollArea()
+        rows_area.setObjectName("HabitList")
+        rows_area.setWidgetResizable(True)
+        rows_area.setFrameShape(QFrame.Shape.NoFrame)
+        rows_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        rows_area.setWidget(rows_host)
         list_card = Card()
         list_card.setFixedWidth(LIST_WIDTH)
         list_card.body.setContentsMargins(12, 14, 12, 12)
         list_card.body.setSpacing(10)
         list_card.body.addWidget(self.input)
-        list_card.body.addLayout(self.rows)
-        list_card.body.addStretch(1)
+        list_card.body.addWidget(rows_area, 1)
 
         self.detail = HabitDetail(self)
         self.placeholder = Card()
@@ -394,7 +401,7 @@ class HabitsPage(Page):
         self._render()
 
     def _on_changed(self, domain: str) -> None:
-        if domain == "habits":
+        if domain == "habits" and self.live():
             self._render()
 
     def _add(self) -> None:

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
-from contextlib import closing
+from contextlib import closing, suppress
 from dataclasses import dataclass, replace
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
@@ -13,6 +13,7 @@ from PySide6.QtCore import QObject, QStandardPaths, Signal
 PRIORITIES: tuple[str, ...] = ("Normal", "High", "Urgent")
 _KEEP = object()  # update_event: leave this column unchanged
 
+_INTERNAL_SETTINGS = frozenset({"tray_hint_shown"})
 _LEGACY_DB = Path(__file__).resolve().parent.parent / "data" / "origami.db"
 
 _SCHEMA = """
@@ -135,7 +136,18 @@ PRAGMA user_version = 7;
 COMMIT;
 """
 
+# Indexes for the queries that run on every reminder check and chart refresh.
+_MIGRATION_8 = """
+BEGIN;
+CREATE INDEX IF NOT EXISTS focus_started ON focus_sessions (started_at);
+CREATE INDEX IF NOT EXISTS tasks_open ON tasks (done, priority);
+PRAGMA user_version = 8;
+COMMIT;
+"""
+
 SLOT_COLORS = 6
+MAX_TITLE = 500
+ALERT_HISTORY = timedelta(days=7)  # delivered-alert markers older than this can never matter again
 
 
 @dataclass(slots=True, frozen=True)
@@ -148,10 +160,6 @@ class Slot:
     end: time
     color: int = 0
     remind: int | None = None
-
-    @property
-    def minutes(self) -> int:
-        return (self.end.hour * 60 + self.end.minute) - (self.start.hour * 60 + self.start.minute)
 
 
 def _slot(row: sqlite3.Row) -> Slot:
@@ -193,11 +201,11 @@ REMINDER_GRACE = timedelta(minutes=30)  # reminders missed by more than this (ap
 
 @dataclass(slots=True, frozen=True)
 class Reminder:
-    kind: str  # "task" | "event"
+    kind: str  # "task" | "event" | "slot"
     id: int
     title: str
     when: datetime
-    day: date | None = None  # event occurrence the alert belongs to
+    day: date | None = None  # event or slot occurrence the alert belongs to
 
 
 @dataclass(slots=True, frozen=True)
@@ -222,7 +230,6 @@ class Event:
     time: time | None = None  # None = all day
     remind: int | None = None  # minutes before start; None = no reminder
     repeat_days: tuple[int, ...] = ()  # weekdays (Mon=0) it repeats on; () = one-off
-    start: date | None = None  # first day of a repeating series
 
     @property
     def repeats(self) -> bool:
@@ -273,18 +280,15 @@ def _days(text: str) -> tuple[int, ...]:
 
 
 def _event(row: sqlite3.Row) -> Event:
-    day = date.fromisoformat(row["day"])
-    repeat = _days(row["repeat_days"])
     return Event(
         row["id"],
-        day,
+        date.fromisoformat(row["day"]),
         row["title"],
         row["notes"],
         row["priority"],
         time.fromisoformat(row["time"]) if row["time"] else None,
         row["remind"],
-        repeat,
-        day if repeat else None,
+        _days(row["repeat_days"]),
     )
 
 
@@ -293,13 +297,21 @@ def _sort_key(event: Event) -> tuple:
 
 
 def _clean_title(title: str) -> str:
-    title = title.strip()
+    title = " ".join(title.split())[:MAX_TITLE]
     if not title:
         raise ValueError("title must not be empty")
     return title
 
 
-def _default_dir() -> Path:
+def _remind(minutes: int | None) -> int | None:
+    return None if minutes is None else max(0, int(minutes))
+
+
+def _days_text(days: tuple[int, ...]) -> str:
+    return ",".join(map(str, _days(",".join(map(str, days)))))
+
+
+def default_dir() -> Path:
     home = os.environ.get("ORIGAMI_HOME")
     if home:
         return Path(home)
@@ -311,11 +323,12 @@ class Store(QObject):
 
     def __init__(self, path: Path | None = None) -> None:
         super().__init__()
-        self.path = Path(path) if path else _default_dir() / "origami.db"
+        self.path = Path(path) if path else default_dir() / "origami.db"
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._db = sqlite3.connect(self.path)
+        self._db = sqlite3.connect(self.path, timeout=5)
         self._db.row_factory = sqlite3.Row
         self._db.execute("PRAGMA journal_mode=WAL")
+        self._db.execute("PRAGMA synchronous=NORMAL")  # safe with WAL, far fewer fsyncs per write
         self._db.execute("PRAGMA foreign_keys=ON")
         version = self._db.execute("PRAGMA user_version").fetchone()[0]
         if version < 1:
@@ -342,9 +355,20 @@ class Store(QObject):
             self._db.executescript(script)
         if self._db.execute("PRAGMA user_version").fetchone()[0] < 7:
             self._db.executescript(_MIGRATION_7)
+        if self._db.execute("PRAGMA user_version").fetchone()[0] < 8:
+            self._db.executescript(_MIGRATION_8)
+        self._prune_alerts()
 
     def close(self) -> None:
+        with suppress(sqlite3.Error):
+            self._db.execute("PRAGMA optimize")
         self._db.close()
+
+    def _prune_alerts(self) -> None:
+        cutoff = (date.today() - ALERT_HISTORY).isoformat()
+        with self._db:
+            self._db.execute("DELETE FROM event_alerts WHERE day < ?", (cutoff,))
+            self._db.execute("DELETE FROM timetable_alerts WHERE day < ?", (cutoff,))
 
     def _import_legacy(self) -> None:
         if not _LEGACY_DB.exists():
@@ -426,6 +450,14 @@ class Store(QObject):
     def task(self, task_id: int) -> Task | None:
         row = self._db.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
         return _task(row) if row else None
+
+    def open_tasks(self, limit: int = -1) -> list[Task]:
+        """Unfinished tasks in list order (most urgent, then newest); limit < 0 means all."""
+        rows = self._db.execute(
+            "SELECT * FROM tasks WHERE done = 0 ORDER BY priority DESC, created_at DESC, id DESC LIMIT ?",
+            (limit,),
+        )
+        return [_task(r) for r in rows]
 
     def add_task(self, title: str, notes: str = "", priority: int = 0) -> Task:
         title = _clean_title(title)
@@ -531,8 +563,8 @@ class Store(QObject):
                     _priority(priority),
                     _now(),
                     at.strftime("%H:%M") if at else None,
-                    remind,
-                    ",".join(map(str, _days(",".join(map(str, repeat_days))))),
+                    _remind(remind),
+                    _days_text(repeat_days),
                 ),
             )
         self.changed.emit("events")
@@ -550,21 +582,27 @@ class Store(QObject):
         repeat_days: tuple[int, ...] | object = _KEEP,
     ) -> None:
         title = _clean_title(title)
+        old = self._db.execute(
+            "SELECT time, remind, repeat_days FROM events WHERE id = ?", (event_id,)
+        ).fetchone()
+        if old is None:
+            return
         fields = {"title": title, "notes": notes.strip(), "priority": _priority(priority)}
         if at is not _KEEP:
             fields["time"] = at.strftime("%H:%M") if at else None
         if remind is not _KEEP:
-            fields["remind"] = remind
+            fields["remind"] = _remind(remind)
         if repeat_days is not _KEEP:
-            fields["repeat_days"] = ",".join(map(str, _days(",".join(map(str, repeat_days)))))
+            fields["repeat_days"] = _days_text(repeat_days)
         assignments = ", ".join(f"{name} = ?" for name in fields)
+        rearm = any(fields.get(k, old[k]) != old[k] for k in ("time", "remind", "repeat_days"))
         with self._db:
             self._db.execute(f"UPDATE events SET {assignments} WHERE id = ?", (*fields.values(), event_id))
-            # Changing the time or reminder re-arms alerts that have not happened yet.
-            self._db.execute(
-                "DELETE FROM event_alerts WHERE event_id = ? AND day >= ?",
-                (event_id, date.today().isoformat()),
-            )
+            if rearm:  # a new time or reminder re-arms alerts that have not happened yet
+                self._db.execute(
+                    "DELETE FROM event_alerts WHERE event_id = ? AND day >= ?",
+                    (event_id, date.today().isoformat()),
+                )
         self.changed.emit("events")
 
     def timetable(self) -> list[Slot]:
@@ -584,6 +622,7 @@ class Store(QObject):
     ) -> list[Slot]:
         """One slot per chosen weekday, so each day can later be edited or removed on its own."""
         title = _clean_title(title)
+        remind = _remind(remind)
         days = _days(",".join(map(str, days)))
         if not days:
             raise ValueError("pick at least one day")
@@ -614,16 +653,22 @@ class Store(QObject):
     ) -> None:
         title = _clean_title(title)
         begin, finish = _slot_times(start, end)
+        old = self._db.execute("SELECT day, start, remind FROM timetable WHERE id = ?", (slot_id,)).fetchone()
+        if old is None:
+            return
+        remind = _remind(remind)
+        rearm = (old["day"], old["start"], old["remind"]) != (day % 7, begin, remind)
         with self._db:
             self._db.execute(
                 "UPDATE timetable SET title = ?, location = ?, day = ?, start = ?, end = ?, color = ?,"
                 " remind = ? WHERE id = ?",
                 (title, location.strip(), day % 7, begin, finish, color % SLOT_COLORS, remind, slot_id),
             )
-            self._db.execute(
-                "DELETE FROM timetable_alerts WHERE slot_id = ? AND day >= ?",
-                (slot_id, date.today().isoformat()),
-            )
+            if rearm:
+                self._db.execute(
+                    "DELETE FROM timetable_alerts WHERE slot_id = ? AND day >= ?",
+                    (slot_id, date.today().isoformat()),
+                )
         self.changed.emit("timetable")
 
     def delete_slot(self, slot_id: int) -> None:
@@ -648,17 +693,28 @@ class Store(QObject):
             ((now + horizon).isoformat(timespec="minutes"),),
         ):
             found.append(Reminder("task", row["id"], row["title"], datetime.fromisoformat(row["remind_at"])))
-        sent = {(r["event_id"], r["day"]) for r in self._db.execute("SELECT event_id, day FROM event_alerts")}
         # An alert can be up to a day before its event, so look one day further ahead.
         first, last = now.date() - timedelta(days=1), (now + horizon).date() + timedelta(days=1)
+        window = (first.isoformat(), last.isoformat())
+        sent = {
+            (r["event_id"], r["day"])
+            for r in self._db.execute(
+                "SELECT event_id, day FROM event_alerts WHERE day BETWEEN ? AND ?", window
+            )
+        }
         for event in self.events_between(first, last):
             when = event.alert_at()
             if when is None or (event.id, event.day.isoformat()) in sent or when > now + horizon:
                 continue
             found.append(Reminder("event", event.id, event.title, when, event.day))
-        slots = [s for s in self.timetable() if s.remind is not None]
+        slots = [_slot(r) for r in self._db.execute("SELECT * FROM timetable WHERE remind IS NOT NULL")]
         if slots:
-            fired = {(r["slot_id"], r["day"]) for r in self._db.execute("SELECT * FROM timetable_alerts")}
+            fired = {
+                (r["slot_id"], r["day"])
+                for r in self._db.execute(
+                    "SELECT slot_id, day FROM timetable_alerts WHERE day BETWEEN ? AND ?", window
+                )
+            }
             for offset in range((last - first).days + 1):
                 day = first + timedelta(days=offset)
                 for slot in slots:
@@ -696,6 +752,9 @@ class Store(QObject):
         self.changed.emit("events")
 
     def log_focus(self, started_at: datetime, seconds: int) -> None:
+        seconds = int(seconds)
+        if seconds <= 0:
+            return
         with self._db:
             self._db.execute(
                 "INSERT INTO focus_sessions (started_at, seconds) VALUES (?, ?)",
@@ -707,8 +766,8 @@ class Store(QObject):
         """(day, sessions, seconds) for every day from start to end inclusive, zero-filled."""
         rows = self._db.execute(
             "SELECT substr(started_at, 1, 10) AS d, COUNT(*) AS n, SUM(seconds) AS total"
-            " FROM focus_sessions WHERE substr(started_at, 1, 10) BETWEEN ? AND ? GROUP BY d",
-            (start.isoformat(), end.isoformat()),
+            " FROM focus_sessions WHERE started_at >= ? AND started_at < ? GROUP BY d",
+            (start.isoformat(), (end + timedelta(days=1)).isoformat()),
         )
         found = {r["d"]: (r["n"], r["total"]) for r in rows}
         days = (end - start).days + 1
@@ -808,14 +867,25 @@ class Store(QObject):
             {**h, "checks": checks.get(h["id"], [])}
             for h in self._table("SELECT * FROM habits ORDER BY position, id")
         ]
-        keys = ("theme", "accent", "font_size", "focus_min", "short_min", "custom_sec")
         data = {
-            "version": 2,
+            "version": 3,
             "exported_at": _now(),
-            "settings": {k: self.get(k) for k in keys if self.get(k)},
+            "settings": {
+                r["key"]: r["value"]
+                for r in self._db.execute("SELECT key, value FROM settings ORDER BY key")
+                if r["key"] not in _INTERNAL_SETTINGS
+            },
             "tasks": self._table("SELECT * FROM tasks ORDER BY id"),
             "events": self._table("SELECT * FROM events ORDER BY day, id"),
+            "timetable": self._table("SELECT * FROM timetable ORDER BY day, start, id"),
             "habits": habits,
             "focus_sessions": self._table("SELECT * FROM focus_sessions ORDER BY id"),
         }
-        Path(path).write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+        # Write beside the target and swap it in, so a failed export never leaves a half-written file.
+        target = Path(path)
+        partial = target.with_name(target.name + ".part")
+        try:
+            partial.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+            os.replace(partial, target)
+        finally:
+            partial.unlink(missing_ok=True)

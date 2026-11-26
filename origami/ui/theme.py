@@ -51,8 +51,6 @@ DARK = Palette(
     info="#5B9BF0", success="#32C584", warning="#F5A524", danger="#F0605A", dark=True,
 )
 
-SCHEMES = {"light": Qt.ColorScheme.Light, "dark": Qt.ColorScheme.Dark}
-
 # key -> (label, light accent, dark accent)
 ACCENTS: dict[str, tuple[str, str, str]] = {
     "indigo": ("Indigo", "#4F5BD5", "#6672E0"),
@@ -94,7 +92,7 @@ QLabel[role="page"] { font-size: 22px; font-weight: 600; color: $text; }
 QLabel[role="yearlight"] { font-size: 22px; font-weight: 400; color: $faint; }
 QLabel[role="title"] { font-size: 18px; font-weight: 600; color: $text; }
 QLabel[role="greeting"] { font-size: 28px; font-weight: 700; color: $text; }
-QLabel[role="quotebody"] { font-size: 16px; font-weight: 500; color: $text; }
+QLabel[role="quotebody"] { font-family: "Georgia", serif; font-size: 15px; font-style: italic; font-weight: 400; color: $text; }
 QLabel[role="h2"] { font-size: 14px; font-weight: 600; }
 QLabel[role="h3"] { font-size: 14px; font-weight: 500; }
 QLabel[role="body"] { font-size: 14px; }
@@ -127,6 +125,8 @@ QFrame[tile="true"] { background: $accent_soft; border: none; border-radius: 8px
 QFrame[dateblock="true"] { background: $raised; border: none; border-radius: 8px; }
 
 QFrame[card="true"] { background: $surface; border: 1px solid $border; border-radius: 12px; }
+QScrollArea#DayEvents, QScrollArea#DayEvents > QWidget > QWidget,
+QScrollArea#HabitList, QScrollArea#HabitList > QWidget > QWidget { background: transparent; border: none; }
 QFrame[card="true"][interactive="true"]:hover { border-color: $border_strong; }
 QFrame[divider="true"] { background: $border; border: none; min-height: 1px; max-height: 1px; }
 QFrame[vrule="true"] { background: $border; border: none; min-width: 1px; max-width: 1px; }
@@ -154,11 +154,6 @@ QPushButton[variant="ghost"]::menu-indicator { image: none; width: 0; }
 QPushButton[variant="link"] { background: transparent; color: $accent; border: none; padding: 0 2px; min-height: 22px; font-size: 12px; font-weight: 500; }
 QPushButton[variant="link"]:hover { background: transparent; color: $accent_hover; text-decoration: underline; }
 QPushButton[variant="link"]:pressed { background: transparent; }
-QPushButton[variant="danger"] { background: $surface; color: $danger; border: 1px solid $border_strong; }
-QPushButton[variant="danger"]:hover { background: $danger; color: #FFFFFF; border-color: $danger; }
-QPushButton[variant="danger"]:disabled { background: $surface; color: $faint; border-color: $border; }
-QPushButton[variant="destructive"] { background: $danger; color: #FFFFFF; border-color: $danger; }
-QPushButton[variant="destructive"]:hover { background: $danger; border-color: $danger; }
 QPushButton#PlayButton { min-width: 60px; max-width: 60px; min-height: 60px; max-height: 60px; border-radius: 30px; padding: 0; }
 
 QPushButton[nav="true"] {
@@ -207,6 +202,7 @@ QPushButton[day="true"]:checked { background: $accent; color: $accent_fg; }
 QTimeEdit {
     background: $surface; border: 1px solid $border_strong; border-radius: 8px; padding: 0 12px; min-height: 34px; font-size: 14px;
 }
+QTimeEdit:hover { border-color: $muted; }
 QTimeEdit:focus { border: 1px solid $accent; }
 QTimeEdit::up-button, QTimeEdit::down-button, QDateEdit::up-button, QDateEdit::down-button { width: 0; border: none; }
 QLineEdit, QPlainTextEdit, QTextEdit, QSpinBox, QDateEdit {
@@ -217,7 +213,7 @@ QPlainTextEdit, QTextEdit { padding: 8px 12px; }
 QLineEdit:hover, QPlainTextEdit:hover, QTextEdit:hover, QSpinBox:hover, QDateEdit:hover { border-color: $muted; }
 QLineEdit:focus, QPlainTextEdit:focus, QTextEdit:focus, QSpinBox:focus, QDateEdit:focus { border: 1px solid $accent; }
 QSpinBox { font-size: 14px; padding: 0 8px; }
-QSpinBox QLineEdit { background: transparent; border: none; padding: 0; min-height: 0; }
+QSpinBox QLineEdit, QDateEdit QLineEdit, QTimeEdit QLineEdit { background: transparent; border: none; padding: 0; min-height: 0; }
 QSpinBox::up-button, QSpinBox::down-button { width: 0; border: none; }
 QLineEdit[flat="true"], QPlainTextEdit[flat="true"] { background: transparent; border: none; padding: 0; }
 QLineEdit[flat="true"]:hover, QPlainTextEdit[flat="true"]:hover { border: none; }
@@ -323,8 +319,8 @@ def PRIORITY_COLORS(p: Palette) -> tuple[str, str, str]:
 def event_tint(p: Palette, priority: int) -> tuple[str, str, str]:
     """(soft fill, stronger fill, ink) for a priority: 0 normal=blue, 1 high=amber, 2 urgent=red."""
     base = PRIORITY_COLORS(p)[max(0, min(priority, 2))]
-    soft = mix(base, p.surface, 0.16 if p.dark else 0.10)
-    strong = mix(base, p.surface, 0.30 if p.dark else 0.20)
+    soft = mix(base, p.surface, 0.15)
+    strong = mix(base, p.surface, 0.25)
     ink = mix(base, p.text, 0.85 if p.dark else 0.78)
     return soft, strong, ink
 
@@ -391,10 +387,12 @@ class ThemeManager(QObject):
         app = self._app
         if app is None:
             return
-        hints = app.styleHints()
-        if hasattr(hints, "setColorScheme"):
-            hints.setColorScheme(SCHEMES.get(self.mode, Qt.ColorScheme.Unknown))
+        # No QStyleHints.setColorScheme: the app paints every colour itself, and forcing Qt's scheme
+        # made the first switch stall for over a second while Windows reloaded its native theme.
         self.palette = self._resolve()
+        # Clearing first is ~5x faster than swapping one sheet for another: Qt then skips diffing
+        # every widget against the old rules. Both calls finish before the next paint, so no flicker.
+        app.setStyleSheet("")
         app.setStyleSheet(qss(self.palette, self.scale))
         app.setPalette(_qpalette(self.palette))
         self.changed.emit()

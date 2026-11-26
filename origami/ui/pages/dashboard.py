@@ -11,6 +11,7 @@ from PySide6.QtWidgets import QFrame, QLineEdit, QVBoxLayout, QWidget
 from origami.context import Context
 from origami.quotes import random_quote
 from origami.store import Event, Habit, Reminder, Task
+from origami.timefmt import clock
 from origami.ui import icons
 from origami.ui.components import (
     CheckDot,
@@ -118,7 +119,7 @@ class EventRow(QWidget):
         title = ElidedLabel(event.title, "body")
         parts = [PRIORITY_NAMES[event.priority], relative_day(event.day)]
         if event.time:
-            parts.append(f"{event.time:%H:%M}")
+            parts.append(clock(event.time))
         meta = Tinted("  ·  ".join(parts), event.priority, ink=True)
         self.setLayout(vbox(title, meta, spacing=1, margins=(30, 6, 16, 6)))
 
@@ -239,13 +240,17 @@ class DashboardPage(Page):
         self._refresh_habits()
 
     def _tick(self) -> None:
+        if not self.live():
+            return
+        if date.today() != self._day:  # past midnight: relative days and habits change too
+            self.on_show()
+            return
         self._refresh_header()
         self._refresh_reminders()
-        if date.today() != self._day:  # past midnight: relative days and habits change too
-            self._day = date.today()
-            self.on_show()
 
     def _on_changed(self, domain: str) -> None:
+        if domain not in ("tasks", "events", "reminders", "habits") or not self.live():
+            return
         refreshers = {
             "tasks": (self._refresh_tasks, self._refresh_reminders),
             "events": (self._refresh_upcoming, self._refresh_reminders),
@@ -267,25 +272,28 @@ class DashboardPage(Page):
 
     def _refresh_header(self) -> None:
         now = datetime.now()
+        self._day = now.date()
         self.title_label.setText(f"{now:%A}, {now.day} {now:%B}")
         text, author = random_quote(now.date().toordinal())
         self._quote.set_quote(text, author)
 
     def _refresh_tasks(self) -> None:
-        pending = [t for t in self.ctx.store.tasks() if not t.done]
+        store = self.ctx.store
+        pending = store.open_tasks(UP_NEXT_ROWS)
+        remaining = store.open_count() - len(pending)
         group = self._tasks
         self._quick.setParent(None)
         group.reset()
         group.add(row_widget(self._quick, margins=(12, 0, 16, 0)))
-        for task in pending[:UP_NEXT_ROWS]:
+        for task in pending:
             group.add(self._task_row(task))
-        if len(pending) > UP_NEXT_ROWS:
-            group.note(f"{len(pending) - UP_NEXT_ROWS} more in Tasks")
+        if remaining > 0:
+            group.note(f"{remaining} more in Tasks")
         elif not pending:
             group.note("Nothing to do. Enjoy the calm.")
 
     def _task_row(self, task: Task) -> QWidget:
-        dot = CheckDot(False)
+        dot = CheckDot(False, name=f"Complete {task.title}")
         dot.toggled.connect(lambda checked, tid=task.id: self.ctx.store.set_done(tid, checked))
         title = ElidedLabel(task.title, "body")
         items: list = [dot, title]
@@ -340,7 +348,7 @@ class DashboardPage(Page):
             group.note("No habits yet.")
 
     def _habit_row(self, habit: Habit) -> QWidget:
-        dot = CheckDot(habit.done_today)
+        dot = CheckDot(habit.done_today, name=f"Done today: {habit.name}")
         dot.toggled.connect(lambda _, hid=habit.id: self.ctx.store.toggle_habit(hid))
         name = ElidedLabel(habit.name, "body")
         if habit.done_today:

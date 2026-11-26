@@ -4,12 +4,15 @@ build-backend = "hatchling.build"
 
 [project]
 name = "origami"
-version = "3.0.0"
+version = "1.0.0"
 description = "A calm desktop workspace for tasks, habits, calendar and focus."
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
 dependencies = ["PySide6-Essentials>=6.8"]
+
+[project.optional-dependencies]
+dev = ["ruff>=0.6"]
 
 [project.scripts]
 origami = "origami.app:run"

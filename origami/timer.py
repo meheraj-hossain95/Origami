@@ -86,7 +86,9 @@ class FocusTimer(QObject):
         self._switch(Mode.SHORT if self.mode is Mode.FOCUS else Mode.FOCUS)
 
     def set_mode(self, mode: Mode) -> None:
-        self._switch(mode)
+        """Switch modes; picking the mode that is already active leaves a running session alone."""
+        if mode is not self.mode:
+            self._switch(mode)
 
     def _seconds_left(self) -> int:
         return max(0, math.ceil(self._deadline - time.monotonic()))

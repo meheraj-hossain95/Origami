@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
-from PySide6.QtCore import QEasingCurve, QRectF, QSize, Qt, QVariantAnimation, Signal
-from PySide6.QtGui import QColor, QFont, QKeySequence, QPainter, QPen, QShortcut
+from PySide6.QtCore import QRectF, QSize, Qt, Signal
+from PySide6.QtGui import QColor, QKeySequence, QPainter, QPen, QShortcut
 from PySide6.QtWidgets import QPushButton, QStackedWidget, QVBoxLayout, QWidget
 
 from origami.context import Context
@@ -15,6 +15,7 @@ from origami.ui.components import (
     Ring,
     Segmented,
     WeekChart,
+    Wheel,
     button,
     divider,
     duration,
@@ -23,7 +24,7 @@ from origami.ui.components import (
     label,
     vbox,
 )
-from origami.ui.theme import UI, mono, pixel_font, theme
+from origami.ui.theme import theme
 
 SIDE_WIDTH = 340
 RING_SIZE = 250
@@ -43,138 +44,6 @@ def hms(seconds: int) -> str:
     hours, rest = divmod(seconds, 3600)
     minutes, secs = divmod(rest, 60)
     return f"{hours}:{minutes:02d}:{secs:02d}" if hours else f"{minutes:02d}:{secs:02d}"
-
-
-class Wheel(QWidget):
-    """One drum of an alarm-clock picker: scroll, drag, click or use the arrow keys."""
-
-    changed = Signal(int)
-
-    def __init__(self, count: int, caption: str) -> None:
-        super().__init__()
-        self._count = count
-        self._caption = caption
-        self._value = 0
-        self._offset = 0.0
-        self._press_y: float | None = None
-        self._dragged = False
-        self._wheel_acc = 0
-        self._snap = QVariantAnimation(self)
-        self._snap.setDuration(160)
-        self._snap.setEasingCurve(QEasingCurve.Type.OutCubic)
-        self._snap.valueChanged.connect(self._on_snap)
-        self.setFixedSize(WHEEL_WIDTH, CAPTION + ROWS * ITEM)
-        self.setFocusPolicy(Qt.FocusPolicy.WheelFocus)
-        self.setCursor(Qt.CursorShape.SizeVerCursor)
-        self.setAttribute(Qt.WidgetAttribute.WA_Hover)
-        theme.changed.connect(self.update)
-
-    def value(self) -> int:
-        return self._value
-
-    def set_value(self, value: int) -> None:
-        self._value = value % self._count
-        self._offset = 0.0
-        self.update()
-
-    def step(self, steps: int) -> None:
-        if steps:
-            self._value = (self._value + steps) % self._count
-            self.update()
-            self.changed.emit(self._value)
-
-    def _mid(self) -> float:
-        return CAPTION + ROWS * ITEM / 2
-
-    def _on_snap(self, value: float) -> None:
-        self._offset = value
-        self.update()
-
-    def wheelEvent(self, event) -> None:
-        self._wheel_acc += event.angleDelta().y()
-        steps = int(self._wheel_acc / 120)
-        if steps:
-            self._wheel_acc -= steps * 120
-            self.step(-steps)
-        event.accept()
-
-    def keyPressEvent(self, event) -> None:
-        key = event.key()
-        if key in (Qt.Key.Key_Up, Qt.Key.Key_Down):
-            self.step(-1 if key == Qt.Key.Key_Up else 1)
-        elif key in (Qt.Key.Key_PageUp, Qt.Key.Key_PageDown):
-            self.step(-5 if key == Qt.Key.Key_PageUp else 5)
-        elif key in (Qt.Key.Key_Left, Qt.Key.Key_Right):
-            self.focusNextPrevChild(key == Qt.Key.Key_Right)
-        else:
-            super().keyPressEvent(event)
-
-    def focusInEvent(self, event) -> None:
-        self.update()
-        super().focusInEvent(event)
-
-    def focusOutEvent(self, event) -> None:
-        self.update()
-        super().focusOutEvent(event)
-
-    def mousePressEvent(self, event) -> None:
-        if event.button() == Qt.MouseButton.LeftButton:
-            self._snap.stop()
-            self._press_y = event.position().y() - self._offset
-            self._dragged = False
-            self.setFocus()
-
-    def mouseMoveEvent(self, event) -> None:
-        if self._press_y is None:
-            return
-        offset = event.position().y() - self._press_y
-        if abs(offset) > 4:
-            self._dragged = True
-        steps = round(-offset / ITEM)
-        if steps:
-            self._press_y -= steps * ITEM
-            offset += steps * ITEM
-            self.step(steps)
-        self._offset = offset
-        self.update()
-
-    def mouseReleaseEvent(self, event) -> None:
-        if self._press_y is None:
-            return
-        self._press_y = None
-        if not self._dragged and event.position().y() > CAPTION:
-            self.step(round((event.position().y() - self._mid()) / ITEM))
-        self._snap.stop()
-        self._snap.setStartValue(self._offset)
-        self._snap.setEndValue(0.0)
-        self._snap.start()
-
-    def paintEvent(self, event) -> None:
-        pal = theme.palette
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        active = self.hasFocus() or self.underMouse()
-
-        caption = pixel_font(UI, 11, QFont.Weight.Bold, scaled=False)
-        caption.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1.4)
-        painter.setFont(caption)
-        painter.setPen(QColor(pal.accent if active else pal.faint))
-        painter.drawText(QRectF(0, 0, self.width(), CAPTION - 6), Qt.AlignmentFlag.AlignCenter, self._caption)
-
-        painter.setClipRect(QRectF(0, CAPTION, self.width(), ROWS * ITEM))
-        mid = self._mid()
-        for i in range(-3, 4):
-            y = mid + i * ITEM + self._offset
-            distance = abs(y - mid) / ITEM
-            if distance > 2.8:
-                continue
-            near = max(0.0, 1 - distance)
-            weight = QFont.Weight.Bold if near > 0.5 else QFont.Weight.Medium
-            painter.setFont(mono(round(22 + 18 * near), weight, scaled=False))
-            painter.setPen(QColor(pal.text if near > 0.5 else pal.muted))
-            painter.setOpacity(max(0.0, 1 - distance * 0.4))
-            text = f"{(self._value + i) % self._count:02d}"
-            painter.drawText(QRectF(0, y - ITEM / 2, self.width(), ITEM), Qt.AlignmentFlag.AlignCenter, text)
 
 
 class TimeDial(QWidget):
@@ -247,7 +116,7 @@ class WeekCard(Card):
         self.body.addWidget(divider())
         self.body.addWidget(self.chart, 1)
         self._saved: list[tuple[date, int, int]] = []
-        timer.tick.connect(lambda *_: self._paint())
+        timer.tick.connect(lambda *_: self.isVisible() and self._paint())
 
     def refresh(self) -> None:
         self._saved = self.store.focus_week(date.today())
@@ -357,7 +226,7 @@ class FocusPage(Page):
         self.setFocus()
 
     def _on_changed(self, domain: str) -> None:
-        if domain == "focus":
+        if domain == "focus" and self.live():
             self._stats()
 
     def _stats(self) -> None:

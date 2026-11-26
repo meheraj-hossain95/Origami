@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import html
 from collections.abc import Callable, Sequence
 from datetime import date, datetime, time, timedelta
 
@@ -9,12 +10,15 @@ from PySide6.QtCore import (
     QEasingCurve,
     QEvent,
     QObject,
+    QPoint,
     QPointF,
     QPropertyAnimation,
+    QRect,
     QRectF,
     QSize,
     Qt,
     QTimer,
+    QVariantAnimation,
     Signal,
 )
 from PySide6.QtGui import (
@@ -33,7 +37,6 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QButtonGroup,
     QComboBox,
-    QDateEdit,
     QDialog,
     QFrame,
     QGraphicsOpacityEffect,
@@ -44,12 +47,12 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSizePolicy,
-    QTimeEdit,
     QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
+from origami import timefmt
 from origami.context import Context
 from origami.ui import icons
 from origami.ui.theme import PRIORITY_COLORS, UI, event_tint, mono, pixel_font, theme
@@ -59,7 +62,9 @@ TABULAR = frozenset({"mono", "stat"})
 
 
 def label(text: str = "", role: str | None = None, *, wrap: bool = False) -> QLabel:
+    """Labels are plain text: a title like "<b>x</b>" is shown as typed, never rendered as HTML."""
     w = QLabel(text.upper() if role == "eyebrow" else text)
+    w.setTextFormat(Qt.TextFormat.PlainText)
     _apply_role(w, role)
     w.setWordWrap(wrap)
     return w
@@ -77,6 +82,11 @@ def _apply_role(w: QLabel, role: str | None) -> None:
             with contextlib.suppress(AttributeError):
                 font.setFeature(QFont.Tag("tnum"), 1)
         w.setFont(font)
+
+
+def plain_tip(text: str) -> str:
+    """Tooltip text that shows user content literally (tooltips otherwise sniff for HTML)."""
+    return f"<p style='white-space:pre'>{html.escape(text)}</p>" if text else ""
 
 
 def clock(seconds: int) -> str:
@@ -134,6 +144,7 @@ def icon_button(name: str, tooltip: str, on_click: Callable | None = None, *, si
     b = QToolButton()
     b.setProperty("iconButton", True)
     b.setToolTip(tooltip)
+    b.setAccessibleName(tooltip)
     b.setCursor(Qt.CursorShape.PointingHandCursor)
     b.setIconSize(QSize(size, size))
     bind_icon(b, name, "muted", size=size)
@@ -235,6 +246,11 @@ class IconLabel(QLabel):
         self._color = color
         self._tint()
 
+    def set_name(self, name: str) -> None:
+        if name != self._name:
+            self._name = name
+            self._tint()
+
     def _tint(self) -> None:
         self.setPixmap(icons.pixmap(self._name, getattr(theme.palette, self._color), self._size))
 
@@ -321,6 +337,34 @@ class Segmented(QFrame):
         self._group.button(self._keys.index(key)).setChecked(True)
 
 
+class Switch(QAbstractButton):
+    """On/off toggle: an accent pill when on, a quiet grey one when off."""
+
+    def __init__(self, checked: bool = False) -> None:
+        super().__init__()
+        self.setCheckable(True)
+        self.setChecked(checked)
+        self.setFixedSize(36, 20)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFocusPolicy(Qt.FocusPolicy.TabFocus)  # keyboard focus only, so clicks leave no ring
+        theme.changed.connect(self.update)
+
+    def paintEvent(self, event) -> None:
+        p = theme.palette
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(p.accent if self.isChecked() else p.border_strong))
+        painter.drawRoundedRect(QRectF(self.rect()), 10, 10)
+        painter.setBrush(QColor("#FFFFFF"))
+        x = self.width() - 18 if self.isChecked() else 2
+        painter.drawEllipse(QRectF(x, 2, 16, 16))
+        if self.hasFocus() and self.focusPolicy() != Qt.FocusPolicy.NoFocus:
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.setPen(QPen(QColor(p.accent), 1.5))
+            painter.drawRoundedRect(QRectF(self.rect()).adjusted(0.75, 0.75, -0.75, -0.75), 9.25, 9.25)
+
+
 class Ring(QWidget):
     def __init__(self, size: int = 120, thickness: int = 8) -> None:
         super().__init__()
@@ -372,18 +416,23 @@ class Ring(QWidget):
 
 
 class CheckDot(QAbstractButton):
-    def __init__(self, checked: bool = False, size: int = 20) -> None:
+    def __init__(self, checked: bool = False, size: int = 20, name: str = "") -> None:
         super().__init__()
         self.setCheckable(True)
         self.setChecked(checked)
         self.setFixedSize(size, size)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setAttribute(Qt.WidgetAttribute.WA_Hover)
+        self.setFocusPolicy(Qt.FocusPolicy.TabFocus)
+        if name:
+            self.setAccessibleName(name)
+        self.priority = 0  # >0 rings the dot in that priority's colour, for tinted rows
         theme.changed.connect(self.update)
 
     def paintEvent(self, event) -> None:
         p = theme.palette
-        hover = self.underMouse() and self.isEnabled()
+        hover = (self.underMouse() or self.hasFocus()) and self.isEnabled()
+        ring = PRIORITY_COLORS(p)[min(self.priority, 2)] if self.priority else p.border_strong
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.scale(self.width() / 20, self.height() / 20)
@@ -393,7 +442,7 @@ class CheckDot(QAbstractButton):
             painter.setBrush(QColor(p.accent_hover if hover else p.accent))
             painter.drawEllipse(rect)
         else:
-            painter.setPen(QPen(QColor(p.accent if hover else p.border_strong), 1.5))
+            painter.setPen(QPen(QColor(p.accent if hover else ring), 1.5))
             painter.setBrush(QColor(p.accent_soft) if hover else Qt.BrushStyle.NoBrush)
             painter.drawEllipse(rect)
         if self.isChecked() or hover:
@@ -633,6 +682,20 @@ def priority_menu(parent: QWidget, current: int, on_pick: Callable[[int], None])
     return menu
 
 
+def show_menu(menu: QMenu, anchor: QWidget) -> None:
+    """Open `menu` under `anchor`, right-aligned to it and kept inside the app window."""
+    menu.ensurePolished()
+    size = menu.sizeHint()
+    area = anchor.window().geometry().adjusted(8, 8, -8, -8)
+    button = QRect(anchor.mapToGlobal(QPoint(0, 0)), anchor.size())
+    x = min(max(button.right() + 1 - size.width(), area.left()), area.right() + 1 - size.width())
+    y = button.bottom() + 5
+    if y + size.height() > area.bottom() + 1:
+        y = button.top() - 5 - size.height()
+    menu.exec(QPoint(x, max(y, area.top())))
+    menu.deleteLater()
+
+
 class OutsideClick(QObject):
     """Calls `callback` once on a mouse press outside `widget` (inline editors lose no edits)."""
 
@@ -709,6 +772,7 @@ class Page(QWidget):
     ) -> None:
         super().__init__()
         self.ctx = ctx
+        self._stale = False
         self.title_label = label(title, "page")
         self.heading = vbox(self.title_label, spacing=2)
         self.header = hbox(spacing=8)
@@ -747,6 +811,31 @@ class Page(QWidget):
     def on_show(self) -> None:
         return None
 
+    def show_page(self) -> None:
+        """Called by the shell on navigation: a full refresh, so nothing is left to catch up."""
+        self._stale = False
+        self.on_show()
+
+    def live(self) -> bool:
+        """For store-change handlers: True when the page is on screen and should refresh now.
+
+        A hidden page only remembers that it is out of date; it refreshes when it is shown again, so
+        a change made on one page never rebuilds every other page in the background.
+        """
+        if self.isVisible():
+            return True
+        self._stale = True
+        return False
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        if self._stale:
+            QTimer.singleShot(0, self._catch_up)
+
+    def _catch_up(self) -> None:
+        if self._stale and self.isVisible():
+            self.show_page()
+
 
 class Dropdown(QComboBox):
     """Combo box whose list is 8 rows tall and opens on the selected value."""
@@ -776,7 +865,7 @@ def when_text(moment: datetime) -> str:
     """Today 18:00 / Tomorrow 09:00 / Mon 30 Nov 09:00."""
     delta = (moment.date() - date.today()).days
     day = {0: "Today", 1: "Tomorrow", -1: "Yesterday"}.get(delta, f"{moment:%a} {moment.day} {moment:%b}")
-    return f"{day} {moment:%H:%M}"
+    return f"{day} {timefmt.clock(moment)}"
 
 
 def _round_up(moment: datetime, minutes: int = 5) -> datetime:
@@ -785,68 +874,291 @@ def _round_up(moment: datetime, minutes: int = 5) -> datetime:
     return moment + timedelta(minutes=extra)
 
 
-def reminder_menu(
+class Wheel(QWidget):
+    """One drum of an alarm-clock picker: scroll, drag, click or use the arrow keys.
+
+    `fmt` turns a value into its label; `wrap=False` stops at both ends instead of cycling.
+    """
+
+    changed = Signal(int)
+
+    def __init__(
+        self,
+        count: int,
+        caption: str,
+        *,
+        fmt: Callable[[int], str] = lambda v: f"{v:02d}",
+        width: int = 84,
+        item: int = 42,
+        rows: int = 5,
+        caption_h: int = 26,
+        font: tuple[int, int] = (22, 18),
+        wrap: bool = True,
+    ) -> None:
+        super().__init__()
+        self._count = count
+        self._caption = caption
+        self._fmt, self._wrap, self._font = fmt, wrap, font
+        self.item, self.rows, self.caption_h = item, rows, caption_h
+        self._value = 0
+        self._offset = 0.0
+        self._press_y: float | None = None
+        self._dragged = False
+        self._wheel_acc = 0
+        self._snap = QVariantAnimation(self)
+        self._snap.setDuration(160)
+        self._snap.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._snap.valueChanged.connect(self._on_snap)
+        self.setFixedSize(width, caption_h + rows * item)
+        self.setFocusPolicy(Qt.FocusPolicy.WheelFocus)
+        self.setCursor(Qt.CursorShape.SizeVerCursor)
+        self.setAttribute(Qt.WidgetAttribute.WA_Hover)
+        theme.changed.connect(self.update)
+
+    def value(self) -> int:
+        return self._value
+
+    def _fit(self, value: int) -> int:
+        return value % self._count if self._wrap else max(0, min(value, self._count - 1))
+
+    def set_value(self, value: int) -> None:
+        self._value = self._fit(value)
+        self._offset = 0.0
+        self.update()
+
+    def step(self, steps: int) -> None:
+        value = self._fit(self._value + steps)
+        if value != self._value:
+            self._value = value
+            self.update()
+            self.changed.emit(self._value)
+
+    def _mid(self) -> float:
+        return self.caption_h + self.rows * self.item / 2
+
+    def _on_snap(self, value: float) -> None:
+        self._offset = value
+        self.update()
+
+    def wheelEvent(self, event) -> None:
+        self._wheel_acc += event.angleDelta().y()
+        steps = int(self._wheel_acc / 120)
+        if steps:
+            self._wheel_acc -= steps * 120
+            self.step(-steps)
+        event.accept()
+
+    def keyPressEvent(self, event) -> None:
+        key = event.key()
+        if key in (Qt.Key.Key_Up, Qt.Key.Key_Down):
+            self.step(-1 if key == Qt.Key.Key_Up else 1)
+        elif key in (Qt.Key.Key_PageUp, Qt.Key.Key_PageDown):
+            self.step(-5 if key == Qt.Key.Key_PageUp else 5)
+        elif key in (Qt.Key.Key_Left, Qt.Key.Key_Right):
+            self.focusNextPrevChild(key == Qt.Key.Key_Right)
+        else:
+            super().keyPressEvent(event)
+
+    def focusInEvent(self, event) -> None:
+        self.update()
+        super().focusInEvent(event)
+
+    def focusOutEvent(self, event) -> None:
+        self.update()
+        super().focusOutEvent(event)
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._snap.stop()
+            self._press_y = event.position().y() - self._offset
+            self._dragged = False
+            self.setFocus()
+
+    def mouseMoveEvent(self, event) -> None:
+        if self._press_y is None:
+            return
+        offset = event.position().y() - self._press_y
+        if abs(offset) > 4:
+            self._dragged = True
+        steps = round(-offset / self.item)
+        if steps:
+            self._press_y -= steps * self.item
+            offset += steps * self.item
+            self.step(steps)
+        self._offset = offset
+        self.update()
+
+    def mouseReleaseEvent(self, event) -> None:
+        if self._press_y is None:
+            return
+        self._press_y = None
+        if not self._dragged and event.position().y() > self.caption_h:
+            self.step(round((event.position().y() - self._mid()) / self.item))
+        self._snap.stop()
+        self._snap.setStartValue(self._offset)
+        self._snap.setEndValue(0.0)
+        self._snap.start()
+
+    def paintEvent(self, event) -> None:
+        pal = theme.palette
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        active = self.hasFocus() or self.underMouse()
+
+        caption = pixel_font(UI, 11, QFont.Weight.Bold, scaled=False)
+        caption.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1.4)
+        painter.setFont(caption)
+        painter.setPen(QColor(pal.accent if active else pal.faint))
+        head = QRectF(0, 0, self.width(), self.caption_h - 6)
+        painter.drawText(head, Qt.AlignmentFlag.AlignCenter, self._caption)
+
+        painter.setClipRect(QRectF(0, self.caption_h, self.width(), self.rows * self.item))
+        mid = self._mid()
+        for i in range(-3, 4):
+            y = mid + i * self.item + self._offset
+            distance = abs(y - mid) / self.item
+            if distance > 2.8:
+                continue
+            near = max(0.0, 1 - distance)
+            weight = QFont.Weight.Bold if near > 0.5 else QFont.Weight.Medium
+            painter.setFont(mono(round(self._font[0] + self._font[1] * near), weight, scaled=False))
+            painter.setPen(QColor(pal.text if near > 0.5 else pal.muted))
+            painter.setOpacity(max(0.0, 1 - distance * 0.4))
+            value = self._value + i
+            if not self._wrap and not 0 <= value < self._count:
+                continue
+            text = self._fmt(value % self._count)
+            cell = QRectF(0, y - self.item / 2, self.width(), self.item)
+            painter.drawText(cell, Qt.AlignmentFlag.AlignCenter, text)
+
+
+class DateTimeDial(QWidget):
+    """Day, hour and minute wheels (plus AM/PM in 12-hour mode) over one highlighted band."""
+
+    changed = Signal()
+    DAYS = 366
+    ITEM, ROWS, CAPTION, PAD = 34, 5, 24, 10
+
+    def __init__(self, initial: datetime) -> None:
+        super().__init__()
+        self._today = date.today()
+        size = {"item": self.ITEM, "rows": self.ROWS, "caption_h": self.CAPTION}
+        self.day = Wheel(self.DAYS, "DAY", fmt=self._day_text, width=128, font=(12, 3), wrap=False, **size)
+        self._h24 = timefmt.hour24()
+        if self._h24:
+            self.hour = Wheel(24, "HOUR", width=56, font=(15, 7), **size)
+        else:
+            self.hour = Wheel(12, "HOUR", fmt=lambda v: str(v or 12), width=56, font=(15, 7), **size)
+        self.minute = Wheel(12, "MIN", fmt=lambda v: f"{v * 5:02d}", width=56, font=(15, 7), **size)
+        wheels = [self.day, self.hour, self.minute]
+        if not self._h24:
+            self.half = Wheel(2, "", fmt=("AM", "PM").__getitem__, width=52, font=(12, 3), wrap=False, **size)
+            wheels.append(self.half)
+        self.setLayout(hbox(*wheels, spacing=4, margins=(self.PAD,) * 4))
+        self.set_value(initial)
+        for wheel in wheels:
+            wheel.changed.connect(lambda _: self.changed.emit())
+        theme.changed.connect(self.update)
+
+    def _day_text(self, offset: int) -> str:
+        if offset < 2:
+            return ("Today", "Tomorrow")[offset]
+        d = self._today + timedelta(days=offset)
+        return f"{d:%a} {d.day} {d:%b}"
+
+    def set_value(self, moment: datetime) -> None:
+        self.day.set_value((moment.date() - self._today).days)
+        if self._h24:
+            self.hour.set_value(moment.hour)
+        else:
+            self.hour.set_value(moment.hour % 12)
+            self.half.set_value(moment.hour // 12)
+        self.minute.set_value(moment.minute // 5)
+
+    def value(self) -> datetime:
+        hour = self.hour.value() if self._h24 else self.hour.value() + 12 * self.half.value()
+        day = self._today + timedelta(days=self.day.value())
+        return datetime.combine(day, time(hour, self.minute.value() * 5))
+
+    def paintEvent(self, event) -> None:
+        pal = theme.palette
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(pal.raised))
+        painter.drawRoundedRect(QRectF(self.rect()), 14, 14)
+        mid = self.PAD + self.CAPTION + self.ROWS * self.ITEM / 2
+        band = QRectF(self.PAD - 4, mid - self.ITEM / 2 - 2, self.width() - 2 * self.PAD + 8, self.ITEM + 4)
+        painter.setBrush(QColor(pal.surface))
+        painter.setPen(QPen(QColor(pal.border), 1))
+        painter.drawRoundedRect(band, 10, 10)
+
+
+def pick_reminder(
     parent: QWidget, current: datetime | None, on_pick: Callable[[datetime | None], None]
-) -> QMenu:
-    now = datetime.now()
-    today = now.date()
-    options: list[tuple[str, datetime]] = [("In 1 hour", _round_up(now + timedelta(hours=1)))]
-    if now.hour < 17:
-        options.append(("This evening", datetime.combine(today, time(18, 0))))
-    options.append(("Tomorrow morning", datetime.combine(today + timedelta(days=1), time(9, 0))))
-    monday = today + timedelta(days=7 - today.weekday())
-    options.append(("Next Monday", datetime.combine(monday, time(9, 0))))
-    menu = StyledMenu(parent)
-    bell = icons.icon("bell", theme.palette.muted, 14)
-    for text, moment in options:
-        action = menu.addAction(bell, f"{text}  ·  {when_text(moment)}")
-        action.triggered.connect(lambda _=False, m=moment: on_pick(m))
-    menu.addSeparator()
-    custom = menu.addAction(icons.icon("calendar", theme.palette.muted, 14), "Pick date & time…")
-    def choose() -> None:
-        picked = pick_datetime(parent, current or options[0][1])
-        if picked is not None:
-            on_pick(picked)
-
-    custom.triggered.connect(choose)
-    if current is not None:
-        remove = menu.addAction(icons.icon("x", theme.palette.danger, 14), "Remove reminder")
-        remove.triggered.connect(lambda: on_pick(None))
-    return menu
+) -> None:
+    """Straight to the date & time picker; an existing reminder can also be removed from there."""
+    initial = current if current and current > datetime.now() else datetime.now() + timedelta(hours=1)
+    remove = (lambda: on_pick(None)) if current is not None else None
+    picked = pick_datetime(parent, initial, on_remove=remove)
+    if picked is not None:
+        on_pick(picked)
 
 
-def pick_datetime(parent: QWidget, initial: datetime, title: str = "Remind me") -> datetime | None:
+def pick_datetime(
+    parent: QWidget,
+    initial: datetime,
+    title: str = "Remind me",
+    *,
+    on_remove: Callable[[], None] | None = None,
+) -> datetime | None:
     dialog = QDialog(parent, Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint)
     dialog.setObjectName("Confirm")
     dialog.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
     dialog.setModal(True)
-    dialog.setFixedWidth(360)
-    day = QDateEdit(initial.date())
-    day.setCalendarPopup(True)
-    day.setDisplayFormat("ddd d MMM yyyy")
-    day.setMinimumDate(date.today())
-    clock_edit = QTimeEdit(initial.time())
-    clock_edit.setDisplayFormat("HH:mm")
+    initial = _round_up(initial, 5)
+    dial = DateTimeDial(initial)
+    dialog.setFixedWidth(max(360, dial.sizeHint().width() + 48))
+    summary = label("", "caption")
+    summary.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    picked = dial.value
+
+    def refresh() -> None:
+        late = picked() <= datetime.now()
+        summary.setText("That time has already passed" if late else f"Reminder: {when_text(picked())}")
+        retone(summary, "danger" if late else "accent")
+        ok.setEnabled(not late)
+
     card = Card()
     card.body.setContentsMargins(24, 22, 24, 20)
-    card.body.setSpacing(10)
+    card.body.setSpacing(12)
     card.body.addWidget(label(title, "h2"))
-    fields = hbox(day, clock_edit, spacing=8)
-    fields.setStretch(0, 1)
-    card.body.addLayout(fields)
-    card.body.addSpacing(8)
+    card.body.addWidget(dial, 0, Qt.AlignmentFlag.AlignHCenter)
+    dial.changed.connect(refresh)
+    card.body.addWidget(summary)
+    card.body.addSpacing(4)
     cancel = button("Cancel", "secondary", on_click=dialog.reject)
     ok = button("Set reminder", on_click=dialog.accept)
-    card.body.addLayout(hbox(None, cancel, ok, spacing=8))
+    actions = hbox(None, cancel, ok, spacing=8)
+    if on_remove is not None:
+
+        def remove() -> None:
+            dialog.reject()
+            on_remove()
+
+        actions.insertWidget(0, button("Remove", "ghost", on_click=remove))
+    card.body.addLayout(actions)
+    refresh()
     shell = QVBoxLayout(dialog)
     shell.setContentsMargins(0, 0, 0, 0)
     shell.addWidget(card)
     dialog.adjustSize()
     anchor = parent.window().frameGeometry().center()
     dialog.move(anchor - dialog.rect().center())
-    if dialog.exec() != QDialog.DialogCode.Accepted:
-        return None
-    return datetime.combine(day.date().toPython(), clock_edit.time().toPython())
+    accepted = dialog.exec() == QDialog.DialogCode.Accepted
+    value = picked()
+    dialog.deleteLater()
+    return value if accepted else None
 
 
 def confirm(parent: QWidget, title: str, text: str, action: str = "Delete") -> bool:
@@ -859,7 +1171,7 @@ def confirm(parent: QWidget, title: str, text: str, action: str = "Delete") -> b
     card.body.setContentsMargins(24, 24, 24, 20)
     card.body.setSpacing(8)
     cancel = button("Cancel", "secondary", on_click=dialog.reject)
-    ok = button(action, "destructive", on_click=dialog.accept)
+    ok = button(action, on_click=dialog.accept)
     card.body.addWidget(label(title, "h2"))
     card.body.addWidget(label(text, "muted", wrap=True))
     card.body.addSpacing(12)
@@ -870,13 +1182,16 @@ def confirm(parent: QWidget, title: str, text: str, action: str = "Delete") -> b
     dialog.adjustSize()
     anchor = parent.window().frameGeometry().center()
     dialog.move(anchor - dialog.rect().center())
-    return dialog.exec() == QDialog.DialogCode.Accepted
+    accepted = dialog.exec() == QDialog.DialogCode.Accepted
+    dialog.deleteLater()
+    return accepted
 
 
 class Toast(QLabel):
     def __init__(self, parent: QWidget, text: str) -> None:
         super().__init__(text, parent)
         self.setObjectName("Toast")
+        self.setTextFormat(Qt.TextFormat.PlainText)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._effect = QGraphicsOpacityEffect(self)
         self._effect.setOpacity(0.0)

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QIcon, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
@@ -13,9 +15,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from origami import ASSETS
+from origami import ASSETS, sounds
 from origami.context import Context
+from origami.notify_prefs import KIND_KEYS, NOTIFY_DEFAULTS
 from origami.reminders import ReminderService, describe
+from origami.sounds import DEFAULT_SOUND
 from origami.store import Reminder
 from origami.timer import LABELS, Mode
 from origami.ui import titlebar
@@ -32,6 +36,7 @@ from origami.ui.components import (
     label,
     vbox,
 )
+from origami.ui.notify import Notifier
 from origami.ui.pages.calendar import CalendarPage
 from origami.ui.pages.dashboard import DashboardPage
 from origami.ui.pages.focus import FocusPage
@@ -44,6 +49,7 @@ from origami.ui.theme import theme
 
 WINDOW_SIZE = QSize(1240, 780)
 MIN_SIZE = QSize(1120, 720)
+SOUND_GAP = 1.5  # seconds; reminders that land together play one sound, not a pile-up
 NAV_ICON = 20  # icon box; glyph fills ~85% => ~17px, balanced with 15px text
 NAV_GAP = 10
 NAV = (
@@ -61,7 +67,8 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.ctx = ctx
         self._tray: QSystemTrayIcon | None = None
-        self._reminder_target = "dashboard"
+        self._notifier = Notifier()
+        self._last_sound = 0.0
         self.setWindowTitle("Origami")
         self.setMinimumSize(MIN_SIZE)
         area = self.screen().availableGeometry()
@@ -127,7 +134,6 @@ class MainWindow(QMainWindow):
         tray.activated.connect(
             lambda reason: self.reveal() if reason != QSystemTrayIcon.ActivationReason.Context else None
         )
-        tray.messageClicked.connect(lambda: self.reveal(self._reminder_target))
         tray.show()
         self._tray = tray
         return tray
@@ -140,14 +146,22 @@ class MainWindow(QMainWindow):
             self.go(page)
 
     def _on_reminder(self, reminder: Reminder) -> None:
+        key = KIND_KEYS.get(reminder.kind, "notify_events")
+        if not self.ctx.store.get_int(key, NOTIFY_DEFAULTS[key]):
+            return
         title, body = describe(reminder, self.ctx.store)
-        self._reminder_target = {"task": "tasks", "slot": "timetable"}.get(reminder.kind, "calendar")
-        tray = self._ensure_tray()
-        if tray is not None:
-            tray.showMessage(title, body, QSystemTrayIcon.MessageIcon.Information, 10_000)
+        target = {"task": "tasks", "slot": "timetable"}.get(reminder.kind, "calendar")
+        icon = {"task": "bell", "slot": "calendar-clock"}.get(reminder.kind, "calendar")
+        self._alert(title, body, icon, target)
+
+    def _alert(self, title: str, body: str, icon: str = "bell", target: str | None = None) -> None:
+        """Themed desktop notification plus the reminder sound chosen in Settings."""
+        self._notifier.show(title, body, icon, (lambda: self.reveal(target)) if target else None)
+        now = time.monotonic()
+        if now - self._last_sound >= SOUND_GAP:
+            self._last_sound = now
+            sounds.play(self.ctx.store.get("reminder_sound", DEFAULT_SOUND))
         QApplication.alert(self)
-        if self.isVisible():
-            self.ctx.toast(f"Reminder: {title}")
 
     def closeEvent(self, event) -> None:
         app = QApplication.instance()
@@ -171,7 +185,7 @@ class MainWindow(QMainWindow):
 
     def _style_titlebar(self) -> None:
         p = theme.palette
-        titlebar.style(self, p.bg, p.text, p.border, p.dark)
+        titlebar.style(self, p.sidebar, p.text, p.border, p.dark)
 
     def _build_sidebar(self) -> QFrame:
         sidebar = QFrame()
@@ -180,7 +194,6 @@ class MainWindow(QMainWindow):
 
         wordmark = label("Origami")
         wordmark.setObjectName("Brand")
-
 
         self._nav: dict[str, QPushButton] = {}
         nav = vbox(spacing=4)
@@ -236,7 +249,7 @@ class MainWindow(QMainWindow):
         self._stack.setCurrentWidget(page)
         for k, b in self._nav.items():
             b.setChecked(k == key)
-        page.on_show()
+        page.show_page()
 
     def _new_task(self) -> None:
         self.go("tasks")
@@ -274,8 +287,5 @@ class MainWindow(QMainWindow):
             if mode == Mode.FOCUS.value
             else ("Break over", "Ready for the next session?")
         )
-        tray = self._ensure_tray()
-        if tray is not None:
-            self._reminder_target = "focus"
-            tray.showMessage(title, body, QSystemTrayIcon.MessageIcon.NoIcon, 4000)
-        QApplication.alert(self)
+        if self.ctx.store.get_int("notify_focus", NOTIFY_DEFAULTS["notify_focus"]):
+            self._alert(title, body, "timer", "focus")

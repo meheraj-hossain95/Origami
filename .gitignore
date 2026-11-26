@@ -13,3 +13,10 @@ dist/
 .DS_Store
 Thumbs.db
 data/
+
+# Local-only: tests, caches, build output
+tests/
+.coverage
+htmlcov/
+*.spec
+*.log

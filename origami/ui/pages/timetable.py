@@ -20,7 +20,19 @@ from PySide6.QtWidgets import (
 
 from origami.context import Context
 from origami.store import SLOT_COLORS, Slot
-from origami.ui.components import Card, Dropdown, Page, button, confirm, hbox, index_of, label, vbox
+from origami.timefmt import clock, hour_label
+from origami.ui.components import (
+    Card,
+    Dropdown,
+    Page,
+    button,
+    confirm,
+    hbox,
+    index_of,
+    label,
+    plain_tip,
+    vbox,
+)
 from origami.ui.pages.calendar import REMIND_OPTIONS, DayToggles
 from origami.ui.theme import UI, mix, mono, pixel_font, theme
 
@@ -144,7 +156,7 @@ class WeekGrid(QWidget):
             self.setCursor(shape)
             if slot:
                 where = f"\n{slot.location}" if slot.location else ""
-                self.setToolTip(f"{slot.title}\n{slot.start:%H:%M}–{slot.end:%H:%M}{where}")
+                self.setToolTip(plain_tip(f"{slot.title}\n{clock(slot.start)}–{clock(slot.end)}{where}"))
             else:
                 self.setToolTip("")
             self.update()
@@ -171,12 +183,10 @@ class WeekGrid(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        # today's column tint
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QColor(mix(p.accent, p.surface, 0.05 if not p.dark else 0.08)))
         painter.drawRect(QRectF(AXIS + today * col, HEADER, col, self.height() - HEADER - BOTTOM))
 
-        # hour lines + labels (half hours as faint dashes)
         painter.setFont(mono(11, QFont.Weight.Normal))
         for h in range(first, last + 1):
             y = HEADER + (h - first) * hour
@@ -190,14 +200,13 @@ class WeekGrid(QWidget):
             painter.drawText(
                 QRectF(0, y - 8, AXIS - 10, 16),
                 Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
-                f"{h % 24:02d}:00",
+                hour_label(h),
             )
         painter.setPen(QPen(QColor(p.border), 1))
         for day in range(8):
             x = AXIS + day * col
             painter.drawLine(QPointF(x + 0.5, HEADER), QPointF(x + 0.5, self.height() - BOTTOM))
 
-        # hovered empty half hour
         if self._hover_cell:
             day, half = self._hover_cell
             top = self._y(half * 30)
@@ -207,9 +216,8 @@ class WeekGrid(QWidget):
             painter.drawRoundedRect(cell, 6, 6)
             painter.setPen(QColor(p.accent))
             painter.setFont(pixel_font(UI, 11, QFont.Weight.DemiBold))
-            painter.drawText(cell, Qt.AlignmentFlag.AlignCenter, f"+ {half // 2:02d}:{half % 2 * 30:02d}")
+            painter.drawText(cell, Qt.AlignmentFlag.AlignCenter, f"+ {clock(time(half // 2, half % 2 * 30))}")
 
-        # slots
         self._boxes = self._layout_boxes()
         title_font = pixel_font(UI, 12, QFont.Weight.DemiBold)
         small = pixel_font(UI, 11, QFont.Weight.Normal)
@@ -228,7 +236,7 @@ class WeekGrid(QWidget):
                 # Short slot: one line, vertically centred.
                 painter.setFont(title_font)
                 painter.setPen(QColor(ink))
-                line = f"{s.title}  {s.start:%H:%M}"
+                line = f"{s.title}  {clock(s.start)}"
                 metrics_text = tm.elidedText(line, Qt.TextElideMode.ElideRight, int(text.width()))
                 painter.drawText(
                     box.adjusted(8, 0, -4, 0),
@@ -238,7 +246,7 @@ class WeekGrid(QWidget):
                 painter.restore()
                 continue
             lines = [(s.title, title_font, tm, ink)]
-            lines.append((f"{s.start:%H:%M}–{s.end:%H:%M}", small, sm, ink))
+            lines.append((f"{clock(s.start)}–{clock(s.end)}", small, sm, ink))
             if s.location:
                 lines.append((s.location, small, sm, ink))
             y = text.y()
@@ -252,7 +260,6 @@ class WeekGrid(QWidget):
                 y += metrics.height()
             painter.restore()
 
-        # current time
         now = datetime.now()
         minutes = now.hour * 60 + now.minute
         if first * 60 <= minutes <= last * 60:
@@ -340,9 +347,9 @@ class SlotDialog(QDialog):
         self.start = Dropdown()
         self.end = Dropdown()
         for t in time_options():
-            self.start.addItem(f"{t:%H:%M}", t)
+            self.start.addItem(clock(t), t)
         for t in [*time_options(15), time(23, 59)]:
-            self.end.addItem(f"{t:%H:%M}", t)
+            self.end.addItem(clock(t), t)
         begin = slot.start if slot else start
         finish = slot.end if slot else time(min(begin.hour + 1, 23), begin.minute)
         self.start.setCurrentIndex(max(index_of(self.start, begin), 0))
@@ -378,7 +385,7 @@ class SlotDialog(QDialog):
         card.body.addSpacing(6)
         actions = hbox(spacing=8)
         if slot:
-            actions.addWidget(button("Delete", "danger", on_click=self._delete))
+            actions.addWidget(button("Delete", "secondary", on_click=self._delete))
         actions.addStretch(1)
         actions.addWidget(button("Cancel", "secondary", on_click=self.reject))
         actions.addWidget(button("Save" if slot else "Add", on_click=self._accept))
@@ -459,8 +466,12 @@ class TimetablePage(Page):
         )
         self.body.addWidget(frame, 1)
         self._scrolled = False
-        ctx.store.changed.connect(lambda domain: domain == "timetable" and self._reload())
+        ctx.store.changed.connect(self._on_changed)
         self._reload()
+
+    def _on_changed(self, domain: str) -> None:
+        if domain == "timetable" and self.live():
+            self._reload()
 
     def on_show(self) -> None:
         self._reload()
@@ -479,9 +490,11 @@ class TimetablePage(Page):
 
     def _add(self, day: int, start: time) -> None:
         dialog = SlotDialog(self, None, day, start)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
+        accepted = dialog.exec() == QDialog.DialogCode.Accepted
         v = dialog.values()
+        dialog.deleteLater()
+        if not accepted:
+            return
         self.ctx.store.add_slots(
             v["title"], v["days"], v["start"], v["end"],
             location=v["location"], color=v["color"], remind=v["remind"],
@@ -491,15 +504,17 @@ class TimetablePage(Page):
 
     def _edit(self, slot: Slot) -> None:
         dialog = SlotDialog(self, slot, slot.day, slot.start)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
+        accepted = dialog.exec() == QDialog.DialogCode.Accepted
+        v, deleted = dialog.values(), dialog.deleted
+        dialog.deleteLater()
+        if not accepted:
             return
         store = self.ctx.store
-        if dialog.deleted:
+        if deleted:
             if confirm(self, "Delete slot", f"Remove “{slot.title}” on {DAY_NAMES[slot.day]}s?"):
                 store.delete_slot(slot.id)
                 self.ctx.toast("Removed from timetable")
             return
-        v = dialog.values()
         days = v["days"]
         keep = slot.day if slot.day in days else days[0]
         store.update_slot(
